@@ -88,8 +88,9 @@ body {
  *
  * pdf.html, pptx.html and imgweb.html paint their own dark ground and are left alone.
  * The document itself stays as the document: a Word page is paper and is white at
- * midnight too. Inverting the contents is a separate feature, issue #19, and wants a
- * colour matrix rather than a stylesheet.
+ * midnight too. Turning the contents over is a separate thing and is asked for
+ * separately: night mode, issue #19, which lives in pdf.html because it is a colour
+ * matrix over the finished page rather than anything a stylesheet can say.
  */
 @media (prefers-color-scheme: dark) {
   :root {

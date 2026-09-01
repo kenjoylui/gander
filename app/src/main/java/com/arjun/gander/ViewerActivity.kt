@@ -312,17 +312,19 @@ class ViewerActivity : AppCompatActivity() {
             else -> showWeb(container, uri, kind, name, ext)
         }
         setUpSearch(toolbar, kind)
-        setUpActions(toolbar, uri, name, ext, mime)
+        setUpActions(toolbar, kind, uri, name, ext, mime)
     }
 
-    /** Share and "show in file manager" toolbar actions. */
+    /** Night mode, share and "show in file manager" toolbar actions. */
     private fun setUpActions(
         toolbar: MaterialToolbar,
+        kind: FileKind,
         uri: Uri,
         name: String,
         ext: String,
         mime: String?
     ) {
+        setUpNightMode(toolbar, kind)
         goToPageItem = toolbar.menu.findItem(R.id.action_go_to_page).apply {
             setOnMenuItemClickListener { askForPage(); true }
         }
@@ -351,6 +353,34 @@ class ViewerActivity : AppCompatActivity() {
                 openFolder(folder ?: return@setOnMenuItemClickListener true)
                 true
             }
+        }
+    }
+
+    /**
+     * Turning the contents of a PDF over for reading in the dark. Issue #19.
+     *
+     * Only a PDF, because it is the only format drawn as a picture rather than laid out
+     * as a document, and only where the message port exists, because that is the whole
+     * of how the page is told. The initial state has already gone out on the URL by the
+     * time this runs, so a WebView without the port still opens in the right mode; what
+     * it cannot do is change it without reopening the file, and offering a control that
+     * quietly does nothing is worse than not offering it. The search item is hidden on
+     * the same test a few lines further down, and for the same reason.
+     */
+    private fun setUpNightMode(toolbar: MaterialToolbar, kind: FileKind) {
+        val item = toolbar.menu.findItem(R.id.action_night_mode)
+        if (kind != FileKind.PDF || !canPortSearch()) {
+            item.isVisible = false
+            return
+        }
+        item.isVisible = true
+        item.isChecked = Settings.night(this)
+        item.setOnMenuItemClickListener {
+            val on = !it.isChecked
+            it.isChecked = on
+            Settings.setNight(this, on)
+            searchPort?.postMessage(WebMessageCompat(if (on) "i1" else "i0"))
+            true
         }
     }
 
@@ -1432,9 +1462,15 @@ class ViewerActivity : AppCompatActivity() {
         // The load strategy is decided here, not in the page, so the headers we serve
         // and the loader the page picks cannot disagree
         val ranged = if (useRanges(total)) 1 else 0
+        // Out on the URL rather than over the port, so a page opens already turned over
+        // instead of drawing itself white and then again. It is also the only route that
+        // survives process death and the recreate() in showRendererGone, neither of which
+        // leaves a port to send anything down.
+        val night = if (kind == FileKind.PDF && Settings.night(this)) 1 else 0
         web.loadUrl(
             "https://$ASSET_HOST/assets/viewer/${kind.page}" +
                 "?name=${Uri.encode(name)}&ext=${Uri.encode(ext)}&ranged=$ranged" +
+                "&night=$night" +
                 pdfjsFloorParams(kind, web.settings.userAgentString)
         )
     }

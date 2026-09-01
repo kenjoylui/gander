@@ -110,6 +110,36 @@ itself. That makes the Chromium floor a fact to check rather than a preference.
   the name in the worker, and by keeping the generic behind the face as a real
   fallback. Read that PR before undoing this, not instead of this note.
 
+- **Night mode's image coordinates are a third contract of the same shape.** Night mode
+  turns a finished page bitmap over and clips the photographs out of the pass, so they
+  stay as they were printed. Where the photographs are comes from `page.imageCoordinates`,
+  filled when a render is asked for with `recordImages: true`. Neither is documented API,
+  and the shape of the answer is not obvious:
+  - **Six numbers per image, and they are fractions, not pixels** — each one is a
+    proportion of the canvas that recorded them. That is what lets a zoom tile clip by
+    the numbers the full-page render produced, and what lets them survive `page.cleanup()`.
+  - **They are three corners of a parallelogram, not a rectangle**, so a rotated or
+    sheared placement is exact. The first corner is the one *between* the other two, so
+    the fourth is `B + C - A` and the area is the cross product of the two edges leaving
+    `A`. Read them as `[minX, minY, maxX, maxY]` and the clip lands somewhere else on the
+    page entirely.
+  - **Recording happens once per page object**, guarded by `!this.imageCoordinates`, and
+    the answer is kept. A second render of the same page measures nothing.
+  - **The array is `Float16Array` above Chromium 135 and `Float32Array` below it**, so the
+    precision available is not the same on every device the app supports. `keepBoxes()`
+    rounds to whole pixels partly for that and partly because an unrounded clip edge is
+    antialiased, which leaves a grey hairline round every photograph.
+  - **Only `paintInlineImageXObject` records, and `paintImageXObject` delegates to it.**
+    `paintImageMaskXObject` does not, which is right: a stencil mask is bilevel line art
+    and has to keep turning over with the text. `paintImageXObjectRepeat` does not either,
+    so a tiled pattern turns over; that fails in the harmless direction.
+
+  The failure mode is the usual one for this file: nothing throws. Photographs quietly
+  start turning over, or a rectangle of the page stops. `IMAGE_KEEP_MAX` in `pdf.html`
+  is the other half of it, and it is a judgement rather than a fact: an image covering
+  more than half a page is taken to be the page, because a scan is one image and night
+  mode has to work on scans.
+
 Bumping pdf.js means editing together the two `pdf.*.mjs` rows above, `PDFJS` in
 `scripts/fetch-viewer-libs.sh`, and `PDFJS_MIN_CHROMIUM_MAJOR`. The card's wording
 lives in `pdf.html` and reads both version numbers out of the query string, so it

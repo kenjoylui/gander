@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Night mode for PDFs, from the viewer's menu. A page stayed white at midnight however the
+  phone was set, which is right for a Word page and wrong for reading a long PDF in bed.
+  Paper goes black and text goes white, and colours keep their hue rather than swapping to
+  the opposite one, so a blue heading comes back blue rather than orange. Photographs are
+  left as they were printed, unless the photograph is the whole page, which is what a scan
+  is. Nothing is written to the file, and the setting is remembered.
+  (thanks @MaxKash-06, who asked for this)
+
 - Zoomed-in PDFs are sharp. A page was drawn once at a fixed size, and pinching in
   magnified that picture rather than drawing a better one, so anything taken past about
   twice its fitted size went soft. That is why a tube map or a site plan was unreadable at

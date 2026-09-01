@@ -39,6 +39,11 @@
          "12/357" as a fraction -->
     <string name="page_indicator_spoken">Page %1$d of %2$d</string>
     <string name="go_to_page">Go to page</string>
+    <!-- Turns the page itself dark, which the phone's own dark mode deliberately does
+         not: a document is paper and stays white at midnight. Named for what it is for
+         rather than what it does, because "invert" describes the arithmetic and this is
+         the only place in the app a reader meets it. -->
+    <string name="night_mode">Night mode</string>
     <string name="page_number">Page number</string>
     <string name="page_range">1 to %1$d</string>
     <string name="page_out_of_range">Enter a page between 1 and %1$d</string>

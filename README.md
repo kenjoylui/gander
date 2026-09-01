@@ -65,6 +65,7 @@ It cannot phone home because it does not even hold the INTERNET permission.
 - **Share sheet and "Open with" integration**: share a file from any app (chat, mail, browser) into Gander, or tap it in a file manager
 - **Find in document**: search inside PDF, Word, Excel, slides, Markdown, text and code with match navigation
 - **Select and copy text in a PDF**, and read one with a screen reader
+- **Night mode for PDFs**: turns the page over for reading in the dark, keeping each colour's hue and leaving photographs as they were printed
 - **Share and locate**: send the open file to any app, or jump to its folder in the file manager
 - **Private by construction**: no permissions, no INTERNET, no analytics, no accounts, nothing leaves the phone
 - **Checks its own promise**: the About screen asks Android what the app requests and shows you the answer, next to the full licence text for every bundled library

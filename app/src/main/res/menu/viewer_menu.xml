@@ -15,6 +15,15 @@
         android:title="@string/go_to_page"
         android:visible="false"
         app:showAsAction="never" />
+    <!-- Turns the contents of a PDF over for reading in the dark, issue #19. The one
+         checkable item in here, and hidden for every format but PDF: it is the only one
+         drawn as a picture rather than laid out as a document. -->
+    <item
+        android:id="@+id/action_night_mode"
+        android:checkable="true"
+        android:title="@string/night_mode"
+        android:visible="false"
+        app:showAsAction="never" />
     <item
         android:id="@+id/action_share"
         android:icon="@drawable/ic_share"

@@ -22,6 +22,36 @@
      before and only the temperature has moved. */
   body { background: #48443D; }
   #pages { padding: 8px 0; }
+
+  /*
+   * Night mode, issue #19. Two colours here; the picture on the page is turned over
+   * by recolour() in the module, against the filter at the top of the body.
+   *
+   * The paper is worth setting even though the canvas that covers it is always opaque:
+   * a page that has not been drawn yet is this box and nothing else, so without it
+   * every page ahead of the reader is a white rectangle until it is drawn, which is the
+   * one thing somebody reading in the dark turned this on to avoid.
+   *
+   * The surround goes to the ground app.css uses in dark mode, so the page is the
+   * darkest thing on screen and its edges still show. The shadow below stops doing
+   * anything at these two colours, and is left alone rather than fought with.
+   */
+  html.vw-night body { background: #17130A; }
+  html.vw-night .pg { background: #000; }
+
+  /* Holds the filter and nothing else. Copied from how pdf.js hides the filters its
+     own high-contrast mode builds, because that is the same engine resolving the same
+     kind of reference from the same place. */
+  #vw-filters {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    visibility: hidden;
+    contain: strict;
+    z-index: -1;
+  }
   /*
    * A page is a box holding two layers: the canvas that is the picture of it, and
    * the text layer that is the words in it, the second sitting exactly on top of
@@ -360,6 +390,34 @@
 </style>
 </head>
 <body>
+<!--
+ * The colour a page is turned over with, issue #19.
+ *
+ * invert(1) on its own flips lightness and hue together, so a blue heading comes back
+ * orange and a red curve comes back cyan. This is invert composed with
+ * hue-rotate(180deg), spelled out rather than asked for by name: ctx.filter can only
+ * reference a filter element, and a matrix written here is the same matrix on every
+ * engine, where a named function is whatever that engine implements.
+ *
+ * All three rows sum to 1, so grey stays grey rather than picking up a cast. White
+ * paper lands on black, body text at 20,20,20 lands on 235,235,235, and a heading at
+ * 0,119,199 lands on 56,175,255 with its hue held at 204 degrees and only its
+ * lightness moved, 0.39 to 0.61.
+ *
+ * sRGB is not the default and is not optional. The SVG default is linearRGB, which
+ * would change the lightness response and read the offset column in the wrong space.
+ -->
+<div id="vw-filters" aria-hidden="true">
+  <svg width="0" height="0"><defs>
+    <filter id="vw-invert" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="
+         0.574 -1.430 -0.144 0 1
+        -0.426 -0.430 -0.144 0 1
+        -0.426 -1.430  0.856 0 1
+         0      0      0     1 0"/>
+    </filter>
+  </defs></svg>
+</div>
 <div id="vw-status" class="vw-status">Rendering document…</div>
 <div id="pages"></div>
 <script src="app.js"></script>
@@ -426,6 +484,15 @@ if (vwPdfBlocked) {
     vwParams.get("locked")
   );
 }
+
+/*
+ * Night mode, and set here rather than in the module for the same reason as everything
+ * else in this script: the module is fetched and parsed after this runs, and every page
+ * laid out in between would be a white rectangle. Global on purpose, the module reads
+ * it once and owns it from then on.
+ */
+var vwNight = vwParams.get("night") === "1";
+if (vwNight) document.documentElement.classList.add("vw-night");
 </script>
 <script nomodule>
 /*
@@ -751,6 +818,8 @@ function blank(slot) {
   slot.canvas.height = 0;
   slot.state = "blank";
   slot.unscaled = null;
+  /* Goes with the bitmap it describes. A blank slot has not been drawn in either mode. */
+  slot.mode = null;
 
   /*
    * The sharp patch goes too, and it goes before the cleanup() at the end of this
@@ -827,9 +896,161 @@ function pump() {
   }
 }
 
+/*
+ * Night mode, issue #19.
+ *
+ * The whole of it is one filtered pass over the finished page bitmap. Not a CSS filter
+ * on the canvas element: that promotes every page to a compositor layer of its own and
+ * is re-evaluated through every scroll and every pinch, which is the trade this file
+ * spent 1.12 undoing. It would also catch the text layer, the selection, the find
+ * marks, the page shadow and the password card, none of which is the document.
+ *
+ * pdf.js does exactly this for its own high-contrast mode: endDrawing() sets ctx.filter
+ * and draws the canvas onto itself once. Same mechanism, different matrix, ours applied
+ * from out here because the matrix it builds is a luminance ramp and throws colour away.
+ */
+var inverted = !!window.vwNight;
+
+/*
+ * How much of a page an image may cover and still be left as it was printed.
+ *
+ * Turning a photograph over is the wart in every reader that does this, so the ones a
+ * page has are clipped out of the pass below. A scanned page is also an image, though,
+ * and it is the whole page: excluding that would make night mode do nothing at all on a
+ * scanned textbook, which is most of what anybody turns it on for. So the rule is that
+ * an image covering most of a page is the page, and goes over with it. Anything below
+ * this is an illustration sitting on paper, and stays.
+ */
+var IMAGE_KEEP_MAX = 0.5;
+
+/*
+ * Where the photographs are, in the pixels of the canvas just drawn.
+ *
+ * pdf.js fills page.imageCoordinates when a render is asked for with recordImages, and
+ * the shape of it is undocumented: six numbers per image, each a fraction of the canvas
+ * that recorded them, giving three corners of the parallelogram the image was painted
+ * into. The first corner is the one between the other two, so the fourth is B + C - A,
+ * and the area is the cross product of the two edges leaving A. It is a parallelogram
+ * rather than a rectangle so that a rotated or sheared placement is still exact.
+ *
+ * Fractions rather than pixels is what makes one recording serve every scale, which is
+ * why a tile can use the numbers the full-page render produced. sx/ox and sy/oy carry
+ * whatever linear map gets from those fractions to this canvas.
+ *
+ * Read the note in docs/VENDORED.md before touching any of this. Nothing here throws if
+ * it is wrong; photographs quietly start turning over, or the clip lands somewhere else
+ * on the page.
+ */
+function keepBoxes(page, sx, ox, sy, oy) {
+  var raw = page && page.imageCoordinates;
+  if (!raw || !raw.length) return [];
+  var out = [];
+  for (var i = 0; i + 5 < raw.length; i += 6) {
+    var ax = raw[i], ay = raw[i + 1];
+    var bx = raw[i + 2], by = raw[i + 3];
+    var cx = raw[i + 4], cy = raw[i + 5];
+    var area = Math.abs((bx - ax) * (cy - ay) - (by - ay) * (cx - ax));
+    if (!(area > 0) || area >= IMAGE_KEEP_MAX) continue;
+
+    /*
+     * Into this canvas, and on to whole pixels.
+     *
+     * Rounding is not tidiness. A clip edge landing part-way across a pixel is
+     * antialiased, so that pixel gets some of the filtered draw and some of what was
+     * under it, and the photograph comes back wearing a grey hairline. Measured on a
+     * 33,856-pixel image: 184 pixels of fringe before this, none after. An
+     * axis-aligned image shares each coordinate between two corners, so rounding them
+     * one at a time keeps it square; a rotated one antialiases along its diagonals
+     * whatever we do here, which is correct.
+     *
+     * To nearest rather than outwards. These arrive as Float16 above Chromium 135 and
+     * Float32 below it, so the worse of the two is about a pixel of slack on a
+     * page-sized canvas, and rounding away from the image would spend that pixel on
+     * paper: an un-inverted line of white against a black page, which is the visible
+     * failure. Rounding to nearest spends it on the edge of the photograph instead,
+     * where a pixel either way cannot be seen.
+     */
+    var pax = Math.round(ax * sx + ox), pay = Math.round(ay * sy + oy);
+    var pbx = Math.round(bx * sx + ox), pby = Math.round(by * sy + oy);
+    var pcx = Math.round(cx * sx + ox), pcy = Math.round(cy * sy + oy);
+    out.push([
+      pax, pay,
+      pbx, pby,
+      pbx + pcx - pax, pby + pcy - pay,
+      pcx, pcy
+    ]);
+  }
+  return out;
+}
+
+/*
+ * Turn a finished bitmap over, all of it but the photographs.
+ *
+ * Plain source-over is right because the bitmap is opaque: pdf.js fills the canvas with
+ * the background colour before the first operator whatever the page does afterwards, and
+ * a page that draws with transparency is composed onto that fill rather than instead of
+ * it. The transform is set rather than assumed; pdf.js restores the one it made, but
+ * inheriting a stray one here would put the whole page back down somewhere else.
+ */
+function recolour(ctx, keep) {
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  if (keep.length) {
+    /* Everything, less the photographs: the canvas wound one way and each image wound
+       the other, which even-odd reads as a hole. */
+    ctx.beginPath();
+    ctx.rect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    for (var i = 0; i < keep.length; i++) {
+      var q = keep[i];
+      ctx.moveTo(q[0], q[1]);
+      ctx.lineTo(q[2], q[3]);
+      ctx.lineTo(q[4], q[5]);
+      ctx.lineTo(q[6], q[7]);
+      ctx.closePath();
+    }
+    ctx.clip("evenodd");
+  }
+  ctx.filter = "url(#vw-invert)";
+  ctx.drawImage(ctx.canvas, 0, 0);
+  ctx.restore();
+}
+
+/*
+ * The reader turned night mode on or off.
+ *
+ * Every page holding a bitmap drawn in the other mode is given up and asked for again,
+ * rather than filtered a second time to put it back. The matrix is its own inverse on
+ * paper, but a saturated colour clamps on the way out and does not come back: red at
+ * 200,30,30 wants 1.265 of a red channel and gets 1.0, and a second pass returns
+ * something else. Draw it again.
+ *
+ * Pages part-way through a render are left where they are. draw() reconciles them when
+ * they land, which is also what makes toggling twice in a second come out right: the
+ * mode is read again at the end of every render, so the last one the reader chose wins
+ * however many are in flight behind it.
+ *
+ * Tiles come back on their own. blank() drops the one a page is holding, and draw()
+ * asks for a new one as it finishes.
+ */
+function setNight(on) {
+  if (on === inverted) return;
+  inverted = on;
+  document.documentElement.classList.toggle("vw-night", on);
+  for (var i = 0; i < slots.length; i++) {
+    var s = slots[i];
+    if (s.state === "drawn" && s.mode !== inverted) { blank(s); want(s); }
+  }
+  pump();
+}
+
 function draw(slot) {
   slot.state = "drawing";
   inFlight++;
+  /* The mode this bitmap is being drawn in, which is not necessarily the mode by the
+     time it lands. Read once here and compared once at the end. */
+  var mode = inverted;
   return doc.getPage(slot.n).then(function (page) {
     slot.page = page;
 
@@ -865,15 +1086,41 @@ function draw(slot) {
     var canvas = slot.canvas;
     canvas.width = viewport.width;
     canvas.height = viewport.height;
+    /* Held rather than asked for twice: recolour() below wants the same context, and
+       getContext is a lookup on every call for a handle that never changes. */
+    var ctx = canvas.getContext("2d");
     slot.task = page.render({
-      canvasContext: canvas.getContext("2d"),
-      viewport: viewport
+      canvasContext: ctx,
+      viewport: viewport,
+      /* Asked for only when it is going to be used. The tracker is allocated per render
+         and every image on the page pays a bounding box into it, so ordinary daylight
+         reading does not carry the cost. pdf.js records once per page object and keeps
+         the answer, which is why a page turned over twice measures itself once. */
+      recordImages: mode
     });
     return slot.task.promise.then(function () {
+      if (mode) {
+        recolour(ctx, keepBoxes(page, canvas.width, 0, canvas.height, 0));
+      }
+      slot.mode = mode;
       return textLayerFor(slot, page, unscaled.clone({ scale: cssScale }));
     });
   }).then(function () {
     slot.state = "drawn";
+    /*
+     * Night mode moved while this was being drawn, so the picture that just arrived is
+     * of the wrong one. Give it up and ask again; the mode is read afresh at the top of
+     * draw(), so this converges however many times the reader taps.
+     *
+     * Here rather than in setNight() because a render in flight cannot be told to change
+     * its mind, and cancelling it would put this page down the same failure path a fling
+     * uses, which is the hottest one in the file and not somewhere to add a special case.
+     */
+    if (slot.mode !== inverted) {
+      blank(slot);
+      want(slot);
+      return;
+    }
     /* A page can come back after being released with a search still running, so
        the hits on it have to be put back: a Range does not survive its nodes. Whole
        registry rather than this page's part of it, because that is one code path
@@ -1020,6 +1267,8 @@ function drawTile(req) {
   if (slot.state !== "drawn" || !slot.page || !slot.unscaled) return;
 
   shed(slot.pending);
+  /* As in draw(): the mode this patch is being drawn in, checked again when it lands. */
+  var mode = inverted;
   var canvas = document.createElement("canvas");
   canvas.className = "tile";
   canvas.setAttribute("aria-hidden", "true");
@@ -1033,8 +1282,13 @@ function drawTile(req) {
   slot.pending = tile;
 
   var cssScale = PAGE_WIDTH / slot.unscaled.width;
+  var ctx = canvas.getContext("2d");
   tile.task = slot.page.render({
-    canvasContext: canvas.getContext("2d"),
+    canvasContext: ctx,
+    /* A no-op in practice: a tile only ever follows a full-page render of the same page,
+       and pdf.js keeps the first answer. Asked for anyway so that a tile is never the
+       thing that leaves a page with no image coordinates to clip by. */
+    recordImages: mode,
     viewport: slot.unscaled.clone({ scale: cssScale * req.k }),
     /*
      * pdf.js applies this outside the viewport's own transform, in canvas pixels, so a
@@ -1070,6 +1324,19 @@ function drawTile(req) {
     tile.task = null;
     if (slot.pending !== tile) { shed(tile); return; }
     slot.pending = null;
+    /* Night mode moved while this was being drawn. The page under it has already been
+       asked for again in the new mode, and this is a patch of the old picture. */
+    if (mode !== inverted) { shed(tile); return; }
+    if (mode) {
+      /* The image coordinates are fractions of the whole page, and this canvas is one
+         rectangle of it blown up: boxW across becomes boxW * k pixels, and the corner
+         the tile starts at moves back to zero. */
+      recolour(ctx, keepBoxes(
+        slot.page,
+        req.boxW * req.k, -req.x * req.k,
+        req.boxH * req.k, -req.y * req.k
+      ));
+    }
     canvas.style.left = String((req.x / req.boxW) * 100) + "%";
     canvas.style.top = String((req.y / req.boxH) * 100) + "%";
     canvas.style.width = String((req.w / req.boxW) * 100) + "%";
@@ -1813,6 +2080,10 @@ function onCommand(msg) {
     stepTo(finding.active + 1);
   } else if (verb === "p") {
     stepTo(finding.active - 1);
+  } else if (verb === "i") {
+    /* Night mode on or off. The only command that is not about finding something, apart
+       from "g", and like it the app holds the state: nothing is reported back. */
+    setNight(msg.charAt(1) === "1");
   } else if (verb === "c") {
     finding.query = "";
     finding.matches = [];
@@ -2147,7 +2418,7 @@ if (!vwPdfBlocked) {
         box.appendChild(tl);
         var slot = {
           n: i, box: box, canvas: c, text: tl,
-          state: "blank", task: null, page: null, layer: null,
+          state: "blank", mode: null, task: null, page: null, layer: null,
           unscaled: null, tile: null, pending: null
         };
         /* The observers are handed elements and need the slot back. Hanging it on
