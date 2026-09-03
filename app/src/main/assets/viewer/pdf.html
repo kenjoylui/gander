@@ -912,19 +912,20 @@ function pump() {
 var inverted = !!window.vwNight;
 
 /*
- * How much of a page an image may cover and still be left as it was printed.
+ * Where the pictures are, in the pixels of the canvas just drawn.
  *
- * Turning a photograph over is the wart in every reader that does this, so the ones a
- * page has are clipped out of the pass below. A scanned page is also an image, though,
- * and it is the whole page: excluding that would make night mode do nothing at all on a
- * scanned textbook, which is most of what anybody turns it on for. So the rule is that
- * an image covering most of a page is the page, and goes over with it. Anything below
- * this is an illustration sitting on paper, and stays.
- */
-var IMAGE_KEEP_MAX = 0.5;
-
-/*
- * Where the photographs are, in the pixels of the canvas just drawn.
+ * Every image on a page is clipped out of the pass below and left exactly as it was
+ * printed. No exceptions, and the exception that suggests itself does not work: a page
+ * that is one full-page image could be a scan of a book, which wants turning over, or a
+ * photograph, which does not, and nothing about the rectangle says which. Sizing the
+ * rule was tried and shipped for a day - an image covering most of a page was taken to
+ * be the page - and the first real file it met was a full-page holiday photograph, which
+ * it turned inside out. Content could tell the two apart, by saturation and how much of
+ * the image is paper-white, but that is a probe and a readback per image to rescue a
+ * case the reader can handle by leaving the toggle off.
+ *
+ * So the cost is real and is accepted: on a document that is nothing but scanned pages,
+ * night mode does nothing at all. What it never does is damage a picture.
  *
  * pdf.js fills page.imageCoordinates when a render is asked for with recordImages, and
  * the shape of it is undocumented: six numbers per image, each a fraction of the canvas
@@ -949,8 +950,8 @@ function keepBoxes(page, sx, ox, sy, oy) {
     var ax = raw[i], ay = raw[i + 1];
     var bx = raw[i + 2], by = raw[i + 3];
     var cx = raw[i + 4], cy = raw[i + 5];
-    var area = Math.abs((bx - ax) * (cy - ay) - (by - ay) * (cx - ax));
-    if (!(area > 0) || area >= IMAGE_KEEP_MAX) continue;
+    /* A degenerate rectangle is not a picture and would clip nothing. */
+    if (!(Math.abs((bx - ax) * (cy - ay) - (by - ay) * (cx - ax)) > 0)) continue;
 
     /*
      * Into this canvas, and on to whole pixels.

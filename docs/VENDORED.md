@@ -134,11 +134,10 @@ itself. That makes the Chromium floor a fact to check rather than a preference.
     and has to keep turning over with the text. `paintImageXObjectRepeat` does not either,
     so a tiled pattern turns over; that fails in the harmless direction.
 
-  The failure mode is the usual one for this file: nothing throws. Photographs quietly
-  start turning over, or a rectangle of the page stops. `IMAGE_KEEP_MAX` in `pdf.html`
-  is the other half of it, and it is a judgement rather than a fact: an image covering
-  more than half a page is taken to be the page, because a scan is one image and night
-  mode has to work on scans.
+  The failure mode is the usual one for this file: nothing throws. Pictures quietly start
+  turning over, or a rectangle of the page stops. Note that `keepBoxes()` excludes **every**
+  image without judging it, so a page that is one full-page image is left alone entirely;
+  the reasoning, and the sizing rule that was tried and withdrawn, is in the comment there.
 
 Bumping pdf.js means editing together the two `pdf.*.mjs` rows above, `PDFJS` in
 `scripts/fetch-viewer-libs.sh`, and `PDFJS_MIN_CHROMIUM_MAJOR`. The card's wording
