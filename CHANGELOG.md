@@ -8,8 +8,9 @@
   the opposite one, so a blue heading comes back blue rather than orange. Photographs are left
   exactly as they were printed, while the things that only look like images - a scanned page, a
   figure exported as a picture, a logo on a letterhead - turn over with the text around them,
-  so none of them is left as a white rectangle on a dark page. Nothing is written to the file,
-  and the setting is remembered.
+  so none of them is left as a white rectangle on a dark page. The one thing it gets wrong is a
+  photograph pale enough to pass for paper itself, which it will turn over. Nothing is written
+  to the file, and the setting is remembered.
   (thanks @MaxKash-06, who asked for this)
 
 - Zoomed-in PDFs are sharp. A page was drawn once at a fixed size, and pinching in

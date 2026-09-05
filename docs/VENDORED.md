@@ -126,7 +126,7 @@ itself. That makes the Chromium floor a fact to check rather than a preference.
   - **Recording happens once per page object**, guarded by `!this.imageCoordinates`, and
     the answer is kept. A second render of the same page measures nothing.
   - **The array is `Float16Array` above Chromium 135 and `Float32Array` below it**, so the
-    precision available is not the same on every device the app supports. `keepBoxes()`
+    precision available is not the same on every device the app supports. `imageQuads()`
     rounds to whole pixels partly for that and partly because an unrounded clip edge is
     antialiased, which leaves a grey hairline round every photograph.
   - **Only `paintInlineImageXObject` records, and `paintImageXObject` delegates to it.**
