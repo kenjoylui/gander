@@ -1008,6 +1008,19 @@ function imageQuads(page, sx, ox, sy, oy) {
  * an image counts as paper only when it is both unsaturated and largely white, which a
  * scan, a chart and a letterhead all are, and which no photograph is.
  *
+ * Where this is known to be wrong, so the next person does not have to find it twice: a
+ * photograph that carries its own white background and is not strongly coloured - a pale
+ * object rendered or shot on white - reads as a document on both counts and is turned over.
+ * Measured on the NeRF paper, whose figures are exactly that: those images run about 0.06
+ * saturation and 80% white, which is a scanned page's signature. A third statistic was tried
+ * to separate them, the fraction of the image that is neither near-black nor near-white, on
+ * the reasoning that a document is bimodal and a photograph is not; it made things worse.
+ * Those images measure 0.17 there against 0.31 for real documents, because being mostly blank
+ * is the very thing they share. It is a limit of judging an image by its colours rather than
+ * a threshold that wants tuning. The visible result is one kept photograph sitting on a white
+ * rectangle beside an inverted one, and the answer if it ever matters is the switch KOReader
+ * ships, not a cleverer measurement.
+ *
  * The page is read back once, small, and every image is measured out of that one buffer.
  * Reading each image separately is the obvious way to write this and was how it was
  * written first: it costs a GPU to CPU round trip per image, which is nothing on a
