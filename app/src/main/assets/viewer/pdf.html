@@ -1008,47 +1008,75 @@ function imageQuads(page, sx, ox, sy, oy) {
  * an image counts as paper only when it is both unsaturated and largely white, which a
  * scan, a chart and a letterhead all are, and which no photograph is.
  *
- * Measured on a 32x32 downscale: the engine does the scaling, and 4 KB comes back. Once
- * per image per page render, and only in night mode.
+ * The page is read back once, small, and every image is measured out of that one buffer.
+ * Reading each image separately is the obvious way to write this and was how it was
+ * written first: it costs a GPU to CPU round trip per image, which is nothing on a
+ * desktop and 11 ms each on a phone, so a page carrying sixty small figures spent 684 ms
+ * deciding what they were. One read of the whole page costs 1.9 ms on the same phone
+ * whatever the page holds. Measured on a Nothing Phone AIN065; the desktop number for
+ * the same work was 0.04 ms, which is why this has to be measured on a device.
  */
-var PROBE_SIDE = 32;
-/* Both measured on real files before being chosen. A page scanned from a book reads
-   about 0.02 saturation and 54% white; a phone photograph of a document reads 0.05 and
-   40%; a colour photograph reads 0.38 and 5%. The thresholds sit in the gap, which is an
-   order of magnitude wide on saturation, rather than being tuned to any one file. */
+var PROBE_WIDTH = 256;
+/* Both thresholds measured on real files before being chosen. A page scanned from a book
+   reads about 0.02 saturation and 54% white; a phone photograph of a document reads 0.05
+   and 40%; a colour photograph reads 0.38 and 5%. They sit in the gap, which is an order
+   of magnitude wide on saturation, rather than being tuned to any one file. */
 var PROBE_SATURATION = 0.15;
 var PROBE_PAPER = 0.25;
+/* A guard rather than a behaviour: with no samples the two ratios below are NaN, and
+   every comparison against NaN is false, so this only makes the answer say what it means.
+   An image small enough to reach it is a few pixels across and invisible either way. */
+var PROBE_MIN_SAMPLES = 4;
 var probeCanvas = null;
 
-function looksLikePaper(ctx, q) {
+/*
+ * One small copy of the finished page, and the map back to it.
+ *
+ * willReadFrequently because reading it back is the entire point: without it Chromium
+ * keeps the canvas on the GPU and pays to fetch it every time.
+ */
+function pageSample(ctx) {
+  var w = Math.max(1, Math.min(PROBE_WIDTH, ctx.canvas.width));
+  var h = Math.max(1, Math.round(w * ctx.canvas.height / ctx.canvas.width));
+  if (!probeCanvas) probeCanvas = document.createElement("canvas");
+  if (probeCanvas.width !== w || probeCanvas.height !== h) {
+    probeCanvas.width = w;
+    probeCanvas.height = h;
+  }
+  var p = probeCanvas.getContext("2d", { willReadFrequently: true });
+  p.clearRect(0, 0, w, h);
+  p.drawImage(ctx.canvas, 0, 0, w, h);
+  /* sx and sy come out equal, because the copy keeps the page's shape. Both are kept so
+     that the mapping below reads as a mapping rather than as a single magic ratio. */
+  return {
+    w: w, h: h,
+    data: p.getImageData(0, 0, w, h).data,
+    sx: w / ctx.canvas.width,
+    sy: h / ctx.canvas.height
+  };
+}
+
+function looksLikePaper(sample, q) {
+  if (!sample) return false;
   var xs = [q[0], q[2], q[4], q[6]];
   var ys = [q[1], q[3], q[5], q[7]];
-  var x = Math.max(0, Math.floor(Math.min.apply(null, xs)));
-  var y = Math.max(0, Math.floor(Math.min.apply(null, ys)));
-  var w = Math.min(ctx.canvas.width - x, Math.ceil(Math.max.apply(null, xs)) - x);
-  var h = Math.min(ctx.canvas.height - y, Math.ceil(Math.max.apply(null, ys)) - y);
-  /* Too small to say anything about, and too small to be worth the readback. */
-  if (!(w > 2 && h > 2)) return false;
+  var x0 = Math.max(0, Math.floor(Math.min.apply(null, xs) * sample.sx));
+  var y0 = Math.max(0, Math.floor(Math.min.apply(null, ys) * sample.sy));
+  var x1 = Math.min(sample.w, Math.ceil(Math.max.apply(null, xs) * sample.sx));
+  var y1 = Math.min(sample.h, Math.ceil(Math.max.apply(null, ys) * sample.sy));
 
-  if (!probeCanvas) {
-    probeCanvas = document.createElement("canvas");
-    probeCanvas.width = probeCanvas.height = PROBE_SIDE;
+  var d = sample.data, pale = 0, sat = 0, n = 0;
+  for (var y = y0; y < y1; y++) {
+    for (var x = x0; x < x1; x++) {
+      var o = (y * sample.w + x) * 4;
+      var r = d[o], g = d[o + 1], b = d[o + 2];
+      var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      if (mn > 204) pale++;
+      if (mx > 0) sat += (mx - mn) / mx;
+      n++;
+    }
   }
-  /* One canvas for every image in the document. willReadFrequently because reading it
-     back is the entire point, and without it Chromium keeps the canvas on the GPU and
-     pays to fetch it every time. */
-  var p = probeCanvas.getContext("2d", { willReadFrequently: true });
-  p.clearRect(0, 0, PROBE_SIDE, PROBE_SIDE);
-  p.drawImage(ctx.canvas, x, y, w, h, 0, 0, PROBE_SIDE, PROBE_SIDE);
-
-  var d = p.getImageData(0, 0, PROBE_SIDE, PROBE_SIDE).data;
-  var pale = 0, sat = 0, n = PROBE_SIDE * PROBE_SIDE;
-  for (var i = 0; i < d.length; i += 4) {
-    var r = d[i], g = d[i + 1], b = d[i + 2];
-    var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-    if (mn > 204) pale++;
-    if (mx > 0) sat += (mx - mn) / mx;
-  }
+  if (n < PROBE_MIN_SAMPLES) return false;
   return (sat / n) < PROBE_SATURATION && (pale / n) > PROBE_PAPER;
 }
 
@@ -1170,6 +1198,7 @@ function draw(slot) {
     return slot.task.promise.then(function () {
       if (mode) {
         var quads = imageQuads(page, canvas.width, 0, canvas.height, 0);
+        var sample = quads.length ? pageSample(ctx) : null;
         /*
          * Judged here, on the whole page, and remembered for the tiles.
          *
@@ -1179,7 +1208,7 @@ function draw(slot) {
          * taken where the whole thing is visible, is also the only way the tile and the
          * page underneath it can agree about what to turn over.
          */
-        slot.pictures = quads.map(function (q) { return !looksLikePaper(ctx, q); });
+        slot.pictures = quads.map(function (q) { return !looksLikePaper(sample, q); });
         recolour(ctx, quads.filter(function (q, i) { return slot.pictures[i]; }));
       }
       slot.mode = mode;

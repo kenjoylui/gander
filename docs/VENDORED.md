@@ -138,7 +138,10 @@ itself. That makes the Chromium floor a fact to check rather than a preference.
   turning over, or a rectangle of the page stops. What the rectangles are *used* for is not
   pdf.js's business and is decided in `looksLikePaper()`, which measures each one and turns
   over the ones that look like paper rather than like a photograph; two simpler rules were
-  tried and withdrawn first, and the comment above `imageQuads()` says which and why.
+  tried and withdrawn first, and the comment above `imageQuads()` says which and why. Note
+  that the page is read back **once** for that, not once per image: the per-image version
+  measured 11 ms each on a phone against 0.04 ms on a desktop, so a page carrying sixty small
+  figures spent 684 ms deciding what they were and nothing on the desktop said so.
 
 Bumping pdf.js means editing together the two `pdf.*.mjs` rows above, `PDFJS` in
 `scripts/fetch-viewer-libs.sh`, and `PDFJS_MIN_CHROMIUM_MAJOR`. The card's wording
