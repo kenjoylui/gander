@@ -1,6 +1,7 @@
 package com.arjun.gander
 
 import android.content.Context
+import androidx.core.content.edit
 
 /**
  * The reader's own preferences, as opposed to [Recents], which is a record of what
@@ -25,6 +26,6 @@ object Settings {
 
     fun setNight(context: Context, on: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putBoolean(KEY_NIGHT, on).apply()
+            .edit { putBoolean(KEY_NIGHT, on) }
     }
 }
