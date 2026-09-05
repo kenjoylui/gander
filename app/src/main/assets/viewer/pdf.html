@@ -818,8 +818,10 @@ function blank(slot) {
   slot.canvas.height = 0;
   slot.state = "blank";
   slot.unscaled = null;
-  /* Goes with the bitmap it describes. A blank slot has not been drawn in either mode. */
+  /* Go with the bitmap they describe. A blank slot has not been drawn in either mode,
+     and has judged none of its images. */
   slot.mode = null;
+  slot.pictures = null;
 
   /*
    * The sharp patch goes too, and it goes before the cleanup() at the end of this
@@ -912,20 +914,22 @@ function pump() {
 var inverted = !!window.vwNight;
 
 /*
- * Where the pictures are, in the pixels of the canvas just drawn.
+ * Where the images on a page are, in the pixels of the canvas just drawn.
  *
- * Every image on a page is clipped out of the pass below and left exactly as it was
- * printed. No exceptions, and the exception that suggests itself does not work: a page
- * that is one full-page image could be a scan of a book, which wants turning over, or a
- * photograph, which does not, and nothing about the rectangle says which. Sizing the
- * rule was tried and shipped for a day - an image covering most of a page was taken to
- * be the page - and the first real file it met was a full-page holiday photograph, which
- * it turned inside out. Content could tell the two apart, by saturation and how much of
- * the image is paper-white, but that is a probe and a readback per image to rescue a
- * case the reader can handle by leaving the toggle off.
+ * Which of them are pictures, and so must be left alone, is a separate question and is
+ * answered by looksLikePaper() below. Two rules were tried here first and both are worth
+ * knowing about, because each fails on a document people actually read.
  *
- * So the cost is real and is accepted: on a document that is nothing but scanned pages,
- * night mode does nothing at all. What it never does is damage a picture.
+ * Sizing it does not work. An image covering most of a page was taken to be the page and
+ * turned over, on the reasoning that a scan is one full-page image. The first real file
+ * it met was a full-page holiday photograph, which it turned inside out; a rectangle
+ * cannot tell a scan from a photograph.
+ *
+ * Excluding every image does not work either, and fails more loudly. A figure exported
+ * as a PNG, a logo on a letterhead and a chapter ornament all carry an opaque white
+ * background, so leaving them alone puts a glaring white rectangle in the middle of a
+ * black page - worse than doing nothing, on the commonest documents there are. KOReader
+ * shipped exactly this rule and had it reported two months later as their issue #4986.
  *
  * pdf.js fills page.imageCoordinates when a render is asked for with recordImages, and
  * the shape of it is undocumented: six numbers per image, each a fraction of the canvas
@@ -942,7 +946,7 @@ var inverted = !!window.vwNight;
  * it is wrong; photographs quietly start turning over, or the clip lands somewhere else
  * on the page.
  */
-function keepBoxes(page, sx, ox, sy, oy) {
+function imageQuads(page, sx, ox, sy, oy) {
   var raw = page && page.imageCoordinates;
   if (!raw || !raw.length) return [];
   var out = [];
@@ -985,7 +989,66 @@ function keepBoxes(page, sx, ox, sy, oy) {
 }
 
 /*
- * Turn a finished bitmap over, all of it but the photographs.
+ * Is this rectangle of the page paper, or is it a picture?
+ *
+ * Paper wants turning over with the rest of the page; a picture wants leaving exactly as
+ * it was printed. Nothing in the PDF says which one an image is - a scanned page, a
+ * chart, a logo and a photograph are all just images - so the only thing left to ask is
+ * what it looks like.
+ *
+ * Two measurements, and it takes both. Saturation catches a colour photograph, which is
+ * full of colour where a document is not. But a black and white photograph has no
+ * saturation either, so on its own that rule turns every one of them inside out; what
+ * separates those is that a document is mostly blank paper and a photograph is not. So
+ * an image counts as paper only when it is both unsaturated and largely white, which a
+ * scan, a chart and a letterhead all are, and which no photograph is.
+ *
+ * Measured on a 32x32 downscale: the engine does the scaling, and 4 KB comes back. Once
+ * per image per page render, and only in night mode.
+ */
+var PROBE_SIDE = 32;
+/* Both measured on real files before being chosen. A page scanned from a book reads
+   about 0.02 saturation and 54% white; a phone photograph of a document reads 0.05 and
+   40%; a colour photograph reads 0.38 and 5%. The thresholds sit in the gap, which is an
+   order of magnitude wide on saturation, rather than being tuned to any one file. */
+var PROBE_SATURATION = 0.15;
+var PROBE_PAPER = 0.25;
+var probeCanvas = null;
+
+function looksLikePaper(ctx, q) {
+  var xs = [q[0], q[2], q[4], q[6]];
+  var ys = [q[1], q[3], q[5], q[7]];
+  var x = Math.max(0, Math.floor(Math.min.apply(null, xs)));
+  var y = Math.max(0, Math.floor(Math.min.apply(null, ys)));
+  var w = Math.min(ctx.canvas.width - x, Math.ceil(Math.max.apply(null, xs)) - x);
+  var h = Math.min(ctx.canvas.height - y, Math.ceil(Math.max.apply(null, ys)) - y);
+  /* Too small to say anything about, and too small to be worth the readback. */
+  if (!(w > 2 && h > 2)) return false;
+
+  if (!probeCanvas) {
+    probeCanvas = document.createElement("canvas");
+    probeCanvas.width = probeCanvas.height = PROBE_SIDE;
+  }
+  /* One canvas for every image in the document. willReadFrequently because reading it
+     back is the entire point, and without it Chromium keeps the canvas on the GPU and
+     pays to fetch it every time. */
+  var p = probeCanvas.getContext("2d", { willReadFrequently: true });
+  p.clearRect(0, 0, PROBE_SIDE, PROBE_SIDE);
+  p.drawImage(ctx.canvas, x, y, w, h, 0, 0, PROBE_SIDE, PROBE_SIDE);
+
+  var d = p.getImageData(0, 0, PROBE_SIDE, PROBE_SIDE).data;
+  var pale = 0, sat = 0, n = PROBE_SIDE * PROBE_SIDE;
+  for (var i = 0; i < d.length; i += 4) {
+    var r = d[i], g = d[i + 1], b = d[i + 2];
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    if (mn > 204) pale++;
+    if (mx > 0) sat += (mx - mn) / mx;
+  }
+  return (sat / n) < PROBE_SATURATION && (pale / n) > PROBE_PAPER;
+}
+
+/*
+ * Turn a finished bitmap over, all of it but the pictures.
  *
  * Plain source-over is right because the bitmap is opaque: pdf.js fills the canvas with
  * the background colour before the first operator whatever the page does afterwards, and
@@ -1101,7 +1164,18 @@ function draw(slot) {
     });
     return slot.task.promise.then(function () {
       if (mode) {
-        recolour(ctx, keepBoxes(page, canvas.width, 0, canvas.height, 0));
+        var quads = imageQuads(page, canvas.width, 0, canvas.height, 0);
+        /*
+         * Judged here, on the whole page, and remembered for the tiles.
+         *
+         * A tile holds only the part of an image that falls inside it, and a corner of a
+         * photograph can measure very differently from all of it: the sky alone is pale
+         * and unsaturated and would be read as paper. One verdict per image per page,
+         * taken where the whole thing is visible, is also the only way the tile and the
+         * page underneath it can agree about what to turn over.
+         */
+        slot.pictures = quads.map(function (q) { return !looksLikePaper(ctx, q); });
+        recolour(ctx, quads.filter(function (q, i) { return slot.pictures[i]; }));
       }
       slot.mode = mode;
       return textLayerFor(slot, page, unscaled.clone({ scale: cssScale }));
@@ -1332,11 +1406,16 @@ function drawTile(req) {
       /* The image coordinates are fractions of the whole page, and this canvas is one
          rectangle of it blown up: boxW across becomes boxW * k pixels, and the corner
          the tile starts at moves back to zero. */
-      recolour(ctx, keepBoxes(
+      var seen = slot.pictures;
+      recolour(ctx, imageQuads(
         slot.page,
         req.boxW * req.k, -req.x * req.k,
         req.boxH * req.k, -req.y * req.k
-      ));
+      ).filter(function (q, i) {
+        /* Same source array, same order, so the page's verdicts line up. Without them,
+           leave the image alone: that is the safe half of being wrong. */
+        return !seen || seen[i];
+      }));
     }
     canvas.style.left = String((req.x / req.boxW) * 100) + "%";
     canvas.style.top = String((req.y / req.boxH) * 100) + "%";
@@ -2419,7 +2498,7 @@ if (!vwPdfBlocked) {
         box.appendChild(tl);
         var slot = {
           n: i, box: box, canvas: c, text: tl,
-          state: "blank", mode: null, task: null, page: null, layer: null,
+          state: "blank", mode: null, pictures: null, task: null, page: null, layer: null,
           unscaled: null, tile: null, pending: null
         };
         /* The observers are handed elements and need the slot back. Hanging it on

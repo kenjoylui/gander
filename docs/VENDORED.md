@@ -135,9 +135,10 @@ itself. That makes the Chromium floor a fact to check rather than a preference.
     so a tiled pattern turns over; that fails in the harmless direction.
 
   The failure mode is the usual one for this file: nothing throws. Pictures quietly start
-  turning over, or a rectangle of the page stops. Note that `keepBoxes()` excludes **every**
-  image without judging it, so a page that is one full-page image is left alone entirely;
-  the reasoning, and the sizing rule that was tried and withdrawn, is in the comment there.
+  turning over, or a rectangle of the page stops. What the rectangles are *used* for is not
+  pdf.js's business and is decided in `looksLikePaper()`, which measures each one and turns
+  over the ones that look like paper rather than like a photograph; two simpler rules were
+  tried and withdrawn first, and the comment above `imageQuads()` says which and why.
 
 Bumping pdf.js means editing together the two `pdf.*.mjs` rows above, `PDFJS` in
 `scripts/fetch-viewer-libs.sh`, and `PDFJS_MIN_CHROMIUM_MAJOR`. The card's wording
