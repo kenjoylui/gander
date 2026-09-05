@@ -818,8 +818,13 @@ function blank(slot) {
   slot.canvas.height = 0;
   slot.state = "blank";
   slot.unscaled = null;
-  /* Go with the bitmap they describe. A blank slot has not been drawn in either mode,
-     and has judged none of its images. */
+  /* The mode goes with the bitmap it describes: a blank slot has not been drawn in
+     either one, and draw() compares against this to know a page needs asking for again.
+     The verdicts beside it are only tidiness, and deliberately so - a slot belongs to one
+     page for the life of the document and the coordinates behind them are fractions, so
+     they would still be true if they were kept. Dropped anyway, with the array they
+     describe, rather than leaving a slot holding something about a page it is no longer
+     showing. */
   slot.mode = null;
   slot.pictures = null;
 
@@ -1282,8 +1287,16 @@ var TILE_MARGIN = 0.2;
  */
 var TILE_MAX_PIXELS = 6e6;
 
-/* At most two, which is one for each page that can be on screen at the zooms where any
-   of this switches on. Three pages across a screen means a zoom below the gate. */
+/*
+ * A ceiling on how many pages may carry a tile at once.
+ *
+ * It does not bind, and that is worth writing down rather than discovering again. A page
+ * box plus its margin is about 1395 CSS px, and by the time the gate opens the visible
+ * height is around 1600 CSS px on a phone and less on a tablet, so the list this
+ * truncates has one or two pages in it and never three. It is here as a bound on a loop
+ * that reads geometry, not as a memory limit that is ever reached, and the tile tests
+ * deliberately do not try to exercise it.
+ */
 var MAX_TILES = 2;
 
 /*
