@@ -115,7 +115,7 @@ itself. That makes the Chromium floor a fact to check rather than a preference.
   stay as they were printed. Where the photographs are comes from `page.imageCoordinates`,
   filled when a render is asked for with `recordImages: true`. Neither is documented API,
   and the shape of the answer is not obvious:
-  - **Six numbers per image, and they are fractions, not pixels** — each one is a
+  - **Six numbers per image, and they are fractions, not pixels** - each one is a
     proportion of the canvas that recorded them. That is what lets a zoom tile clip by
     the numbers the full-page render produced, and what lets them survive `page.cleanup()`.
   - **They are three corners of a parallelogram, not a rectangle**, so a rotated or

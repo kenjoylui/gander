@@ -38,6 +38,20 @@
    */
   html.vw-night body { background: #17130A; }
   html.vw-night .pg { background: #000; }
+  /*
+   * The cards go over too, and they have to be named here rather than left to
+   * app.css. Those tokens turn over with the *system* scheme, and night mode exists
+   * for a reader whose system is not dark: without this, asking for the password on
+   * an encrypted PDF puts a card most of the screen wide, white, with a white input
+   * in it, on an otherwise black page, and it stays there until they type.
+   *
+   * The values are app.css's own night tokens, so a phone that is in dark mode sees
+   * no change and the two routes agree.
+   */
+  html.vw-night .vw-status { background: #2D2A23; color: #E7E2D9; }
+  html.vw-night .vw-status.vw-error { background: #8C1D18; color: #F9DEDC; }
+  html.vw-night .vw-ask-input { background: #17130A; color: #E7E2D9; border-color: #6B6250; }
+  html.vw-night .vw-ask-alert { color: #F9DEDC; }
 
   /* Holds the filter and nothing else. Copied from how pdf.js hides the filters its
      own high-contrast mode builds, because that is the same engine resolving the same
@@ -399,7 +413,9 @@
  * reference a filter element, and a matrix written here is the same matrix on every
  * engine, where a named function is whatever that engine implements.
  *
- * All three rows sum to 1, so grey stays grey rather than picking up a cast. White
+ * All three rows sum to -1, which with the +1 in the offset column sends a grey g to
+ * 1 - g: the same distance from the other end, and still grey rather than picking up a
+ * cast. That is the invariant to check if this is ever edited. White
  * paper lands on black, body text at 20,20,20 lands on 235,235,235, and a heading at
  * 0,119,199 lands on 56,175,255 with its hue held at 204 degrees and only its
  * lightness moved, 0.39 to 0.61.
@@ -1107,19 +1123,30 @@ function recolour(ctx, keep) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = "source-over";
-  if (keep.length) {
-    /* Everything, less the photographs: the canvas wound one way and each image wound
-       the other, which even-odd reads as a hole. */
+  /*
+   * Everything, less the pictures: one hole at a time, and that is the whole of why
+   * this is a loop rather than a single path.
+   *
+   * Putting every picture into one even-odd path is the obvious way to write it and is
+   * wrong where two of them overlap. Even-odd counts crossings, so the canvas plus two
+   * holes is three, which is odd, which is inside: the overlap gets turned over while
+   * both pictures around it are left alone. Two copies of one image at the same place -
+   * which a PDF is free to emit - come to the same three, and the whole picture inverts.
+   *
+   * Clipping is an intersection, so a hole at a time gives everything-but-A intersected
+   * with everything-but-B, which is everything but the two of them together, however
+   * they lie. Nonzero winding does not fix it either: the overlap counts -1 there, which
+   * is also inside.
+   */
+  for (var i = 0; i < keep.length; i++) {
+    var q = keep[i];
     ctx.beginPath();
     ctx.rect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    for (var i = 0; i < keep.length; i++) {
-      var q = keep[i];
-      ctx.moveTo(q[0], q[1]);
-      ctx.lineTo(q[2], q[3]);
-      ctx.lineTo(q[4], q[5]);
-      ctx.lineTo(q[6], q[7]);
-      ctx.closePath();
-    }
+    ctx.moveTo(q[0], q[1]);
+    ctx.lineTo(q[2], q[3]);
+    ctx.lineTo(q[4], q[5]);
+    ctx.lineTo(q[6], q[7]);
+    ctx.closePath();
     ctx.clip("evenodd");
   }
   ctx.filter = "url(#vw-invert)";
