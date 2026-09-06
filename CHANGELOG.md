@@ -14,6 +14,10 @@
   goes on the long-press alone: it costs a tap to open again, and the list prunes itself at
   twenty-five.
 
+- Screen readers name the gesture. A row that can be removed now reads as "double tap and
+  hold to Remove" rather than an unnamed long-press, and the headings and Add a folder have
+  stopped offering a press that did nothing.
+
 - The line shown while a document is being built sits in the middle of the screen. It was a
   card in the flow at the top, which on an otherwise empty screen read less as the state of
   the screen than as a notice about something else. Errors and the PDF password prompt sit

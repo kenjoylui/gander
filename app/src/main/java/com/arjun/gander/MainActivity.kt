@@ -23,6 +23,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
@@ -786,9 +787,28 @@ class MainActivity : AppCompatActivity() {
                     holder.itemView.contentDescription =
                         listOfNotNull(row.title, row.badge, row.subtitle).joinToString(", ")
                     holder.itemView.setOnClickListener { row.onClick() }
-                    holder.itemView.setOnLongClickListener {
-                        row.onLongClick?.invoke()
-                        row.onLongClick != null
+                    // Long-press is how a row is removed, and nothing on screen says so.
+                    // Naming it for TalkBack is the one place that gesture is announced, so
+                    // the rows that do not have it must not claim it either: binding a
+                    // listener at all sets isLongClickable, which used to leave headings and
+                    // "Add a folder" advertising a press that did nothing.
+                    val remover = row.onLongClick
+                    if (remover == null) {
+                        holder.itemView.setOnLongClickListener(null)
+                        // Clearing the listener does not clear the flag it set
+                        holder.itemView.isLongClickable = false
+                        ViewCompat.replaceAccessibilityAction(
+                            holder.itemView, AccessibilityActionCompat.ACTION_LONG_CLICK,
+                            null, null
+                        )
+                    } else {
+                        holder.itemView.setOnLongClickListener { remover(); true }
+                        // Relabels the gesture and nothing else: a null command keeps the
+                        // default behaviour, so this reads "double tap and hold to Remove"
+                        ViewCompat.replaceAccessibilityAction(
+                            holder.itemView, AccessibilityActionCompat.ACTION_LONG_CLICK,
+                            holder.itemView.context.getString(R.string.remove), null
+                        )
                     }
                 }
             }
