@@ -19,6 +19,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -461,14 +462,34 @@ class MainActivity : AppCompatActivity() {
                     )
                     render()
                 },
+                // The only confirmation in the app, because this is the only thing on the
+                // screen that cannot be undone. Android has no inverse for a released
+                // permission: takePersistableUriPermission needs a live grant from an intent
+                // result, so once this has run the way back is the system picker.
                 onLongClick = {
-                    runCatching {
-                        contentResolver.releasePersistableUriPermission(
-                            perm.uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    val dialog = MaterialAlertDialogBuilder(this)
+                        .setTitle(R.string.remove_folder_title)
+                        .setMessage(getString(R.string.remove_folder_message, label))
+                        .setPositiveButton(R.string.remove) { _, _ ->
+                            runCatching {
+                                contentResolver.releasePersistableUriPermission(
+                                    perm.uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                )
+                            }
+                            toastRemoved()
+                            render()
+                        }
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .create()
+                    dialog.show()
+                    // Tinted after show(): getButton returns null until the dialog is laid out
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).also { button ->
+                        button.setTextColor(
+                            MaterialColors.getColor(
+                                button, com.google.android.material.R.attr.colorError
+                            )
                         )
                     }
-                    toastRemoved()
-                    render()
                 }
             )
         }

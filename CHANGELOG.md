@@ -8,6 +8,12 @@
   one. A removal now replaces the badge in front of the reader instead of joining a queue
   behind it.
 
+- Removing a granted folder asks first. It is the only thing on the home screen that cannot
+  be undone, since Android has no way to hand a released permission back, and the route to
+  one removed by accident was a fresh trip through the system picker. A recent file still
+  goes on the long-press alone: it costs a tap to open again, and the list prunes itself at
+  twenty-five.
+
 - The line shown while a document is being built sits in the middle of the screen. It was a
   card in the flow at the top, which on an otherwise empty screen read less as the state of
   the screen than as a notice about something else. Errors and the PDF password prompt sit

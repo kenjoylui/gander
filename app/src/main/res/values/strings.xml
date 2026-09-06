@@ -22,6 +22,13 @@
     <string name="no_folders_hint">Grant a folder to browse its files right here. Gander needs no storage permission to do it.</string>
     <string name="empty_folder">Nothing to show in this folder.</string>
     <string name="removed">Removed</string>
+    <!-- Releasing a folder grant is the one thing on this screen that cannot be undone:
+         Android has no way to re-take a released permission, so the reader would have to
+         walk the system picker again. Hence the only confirmation in the app. -->
+    <string name="remove_folder_title">Remove folder?</string>
+    <string name="remove_folder_message">Gander will lose access to %1$s. Granting it back means finding it in the system picker again.</string>
+    <!-- Also the TalkBack label for the long-press that removes a row -->
+    <string name="remove">Remove</string>
     <string name="search_in_document">Search in document</string>
     <string name="share_file">Share</string>
     <string name="show_in_file_manager">Show in file manager</string>
