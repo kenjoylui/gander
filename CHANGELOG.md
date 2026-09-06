@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- The line shown while a document is being built sits in the middle of the screen. It was a
+  card in the flow at the top, which on an otherwise empty screen read less as the state of
+  the screen than as a notice about something else. Errors and the PDF password prompt sit
+  there too, which also means an error raised after a long document is already open is now
+  in front of the reader rather than at a top they have scrolled past.
+
+- That card is legible in Word, slide, spreadsheet and image documents. Those pages are laid
+  out at 980 pixels and zoomed down to fit the screen, which had been shrinking the card and
+  its text to about 40% of the size they were written at. The PDF viewer already corrected
+  for this; the rest now do the same.
+
 ## 1.15 (2026-09-06)
 
 - A document that fits on the screen sits in the middle of it. A PDF or Word page is about

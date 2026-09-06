@@ -5,6 +5,11 @@
 <title>Image</title>
 <link rel="stylesheet" href="app.css">
 <style>
+  /* No viewport meta on this page, so the WebView lays out at its 980 CSS px default
+     and zooms that down to fit the screen. That shrinks the status card along with
+     everything else; app.css multiplies it back up by this. See the token there. */
+  :root { --vw-zoom: 2.75; }
+
   /* Height on both: body centres its image against the full viewport, and its
      100% only resolves if html has a height to resolve against. */
   html, body { height: 100%; }

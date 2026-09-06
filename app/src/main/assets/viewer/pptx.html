@@ -7,6 +7,11 @@
 <link rel="stylesheet" href="lib/pptx/pptxjs.css">
 <link rel="stylesheet" href="lib/pptx/nv.d3.min.css">
 <style>
+  /* No viewport meta on this page, so the WebView lays out at its 980 CSS px default
+     and zooms that down to fit the screen. That shrinks the status card along with
+     everything else; app.css multiplies it back up by this. See the token there. */
+  :root { --vw-zoom: 2.75; }
+
   /* Warm, and lightness-matched to the Blue Grey 900 it replaces: L* 20.1 against
      20.0, so a slide stands off its ground exactly as far as it did. */
   body { background: #343029; }

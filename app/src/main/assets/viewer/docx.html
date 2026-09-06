@@ -5,6 +5,11 @@
 <title>Word document</title>
 <link rel="stylesheet" href="app.css">
 <style>
+  /* No viewport meta on this page, so the WebView lays out at its 980 CSS px default
+     and zooms that down to fit the screen. That shrinks the status card along with
+     everything else; app.css multiplies it back up by this. See the token there. */
+  :root { --vw-zoom: 2.75; }
+
   /*
    * Where the document sits when there is less of it than there is screen, the same as
    * pdf.html and pptx.html do. A Letter page drawn at the width of a phone was a little
