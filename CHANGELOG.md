@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Removing several recents or folders quickly shows one "Removed" badge rather than one per
+  removal. The framework queues badges and plays each for its full couple of seconds, so a
+  dozen removals in a burst kept a badge on screen for another half a minute after the last
+  one. A removal now replaces the badge in front of the reader instead of joining a queue
+  behind it.
+
 - The line shown while a document is being built sits in the middle of the screen. It was a
   card in the flow at the top, which on an otherwise empty screen read less as the state of
   the screen than as a notice about something else. Errors and the PDF password prompt sit

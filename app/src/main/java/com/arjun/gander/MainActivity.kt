@@ -71,6 +71,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fab: ExtendedFloatingActionButton
 
     /**
+     * The last "Removed" toast, kept only so the next one can cancel it.
+     *
+     * The framework queues toasts rather than replacing them, and each one is shown for
+     * its full duration. Clearing a dozen recents in a couple of seconds therefore left
+     * a dozen badges to play out one after another, still appearing half a minute after
+     * the last thing was removed. Cancelling the one in flight collapses a burst to a
+     * single badge that goes away shortly after the reader stops.
+     */
+    private var removedToast: Toast? = null
+
+    /**
      * Where the rows are built.
      *
      * Reading a granted folder is a query to another app's DocumentsProvider, and so is
@@ -392,6 +403,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Shows the removal badge, replacing any still on screen rather than queueing behind it. */
+    private fun toastRemoved() {
+        removedToast?.cancel()
+        removedToast = Toast.makeText(this, R.string.removed, Toast.LENGTH_SHORT)
+            .also { it.show() }
+    }
+
     private fun homeRows(): Screen {
         val recents = Recents.all(this)
         // Labelled first, then sorted. sortedBy runs its selector on every comparison,
@@ -424,7 +442,7 @@ class MainActivity : AppCompatActivity() {
                     onLongClick = {
                         Recents.remove(this, r.uri)
                         Thumbs.evict(this, r.uri)
-                        Toast.makeText(this, R.string.removed, Toast.LENGTH_SHORT).show()
+                        toastRemoved()
                         render()
                     },
                     thumbUri = uri.takeIf { Thumbs.supported(FileKind.detect(ext, null), ext) },
@@ -449,7 +467,7 @@ class MainActivity : AppCompatActivity() {
                             perm.uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
                         )
                     }
-                    Toast.makeText(this, R.string.removed, Toast.LENGTH_SHORT).show()
+                    toastRemoved()
                     render()
                 }
             )
