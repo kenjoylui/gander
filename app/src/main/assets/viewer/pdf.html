@@ -46,9 +46,12 @@
    * against. And flex: none, so that a column flex container can never decide to shrink
    * a page out of the aspect-ratio it was measured at.
    *
-   * 100vh is the layout viewport, 980 CSS px wide and as tall as the WebView scaled to
-   * match, per the note in the head. That is the same reference imgweb.html's
-   * height: 100% already resolves against in this same WebView.
+   * 100vh, and not the --vw-fit that pptx.html and docx.html centre against, because
+   * here it is exactly right. Those two size a page from the document and can end up
+   * wider than the 980 CSS px this WebView lays out at, which moves the height the
+   * reader can see out from under 100vh; see vwFitHeight() in app.js. A .pg is
+   * width: 100%, so this file can never be wider than the layout viewport and the two
+   * numbers cannot come apart. Measured on the phone: innerHeight and 100vh both 1886.
    */
   #pages {
     box-sizing: border-box;

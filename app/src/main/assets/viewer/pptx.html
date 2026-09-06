@@ -29,8 +29,9 @@
    * window.innerHeight is the number that is right. It reports what the reader can
    * see, it accounts for the zoom out, and unlike visualViewport.height it does not
    * move when they pinch, so nothing shifts under a gesture. CSS cannot ask for it, so
-   * fitHeight() below publishes it as --vw-fit. The 100vh fallback is what applies for
-   * the moment before that runs, and for a deck narrow enough that the two agree.
+   * vwFitHeight() in app.js publishes it as --vw-fit; the reasoning is written out
+   * there. The 100vh fallback is what applies for the moment before that runs, and for
+   * a deck narrow enough that the two agree.
    *
    * As in pdf.html, min-height leaves the container free to grow, so a deck taller
    * than the screen has no free space to distribute and lays out exactly as it did.
@@ -74,22 +75,13 @@ try {
 } catch (e) {
   vwError("Could not render this presentation", String(e));
 }
-/* The height the reader can actually see, for the rule at the top of this file that
-   cannot ask CSS for it. Read once the slides exist, because it is the slides
-   overflowing 980 px that makes the WebView zoom out and moves this number, and again
-   on resize, which is how a rotation arrives while ViewerActivity handles the config
-   change itself and never rebuilds. */
-function fitHeight() {
-  document.documentElement.style.setProperty("--vw-fit", window.innerHeight + "px");
-}
-addEventListener("resize", fitHeight);
-
 var vwChecks = 0;
 var vwPoll = setInterval(function () {
   vwChecks++;
   var slides = document.querySelectorAll("#result .slide");
   if (slides.length > 0) {
-    fitHeight();
+    /* Once the slides exist, because it is they that widen the layout viewport. */
+    vwFitHeight();
     vwStatusDone();
     clearInterval(vwPoll);
   } else if (vwChecks > 40) {

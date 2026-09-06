@@ -5,8 +5,43 @@
 <title>Word document</title>
 <link rel="stylesheet" href="app.css">
 <style>
-  .docx-wrapper { background: var(--vw-ground) !important; padding: 16px 8px !important; }
-  .docx-wrapper > section.docx { box-shadow: 0 1px 6px rgba(0,0,0,0.25) !important; margin-bottom: 16px !important; }
+  /*
+   * Where the document sits when there is less of it than there is screen, the same as
+   * pdf.html and pptx.html do. A Letter page fitted to the width of a phone is a little
+   * over half a screen tall, so a three-line letter stood at the top with two fifths of
+   * the display left as empty ground below it.
+   *
+   * Only three declarations are new. docx-preview's own stylesheet already makes this a
+   * column flex container and gives it align-items: center, which is what has always put
+   * a page in the middle of the screen from side to side; this adds the other axis. That
+   * is a dependency on the vendored file, and it is the one align-items: center has been
+   * riding on since this viewer was written. It also fails safe: a docx-preview that
+   * stopped being flex would make justify-content inert and put the page back at the top,
+   * which is where it is today.
+   *
+   * min-height leaves the wrapper free to grow, so a document longer than the screen has
+   * no free space to distribute and lays out exactly as it did. Only one that already
+   * fits moves. border-box, or the 16px of padding would fall outside the height and give
+   * every short document a little scroll to pull against.
+   *
+   * --vw-fit rather than 100vh: see vwFitHeight() in app.js. It matters here for a
+   * landscape page, which at 1056 px is wider than the 980 the WebView lays out at, and
+   * where 100vh stops being the height the reader can see.
+   */
+  .docx-wrapper {
+    background: var(--vw-ground) !important;
+    padding: 16px 8px !important;
+    box-sizing: border-box;
+    min-height: var(--vw-fit, 100vh);
+    justify-content: center;
+  }
+  /* flex: none because docx-preview leaves these shrinkable. Their min-height holds them
+     up today, so this is guarding the invariant rather than fixing a bug. */
+  .docx-wrapper > section.docx {
+    box-shadow: 0 1px 6px rgba(0,0,0,0.25) !important;
+    margin-bottom: 16px !important;
+    flex: none;
+  }
 
   /* The surround only. section.docx is the page itself, and a page is paper: it stays
      white here for the same reason a PDF page does. */
@@ -55,6 +90,8 @@ vwFetchDoc("buffer")
   })
   .then(function () {
     fixSymbolChars(document.getElementById("container"));
+    /* Once the pages exist, because it is they that decide how wide the document is. */
+    vwFitHeight();
     vwStatusDone();
   })
   .catch(function (e) { vwError("Could not render this Word document", String(e)); });

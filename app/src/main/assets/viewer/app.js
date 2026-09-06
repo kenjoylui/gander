@@ -42,6 +42,38 @@ function vwError(title, detail) {
   el.appendChild(d);
 }
 
+/*
+ * Publish the height the reader can actually see as --vw-fit, for the viewers that
+ * centre a document short enough to fit on the screen.
+ *
+ * 100vh is not reliably that height. These pages carry no viewport meta, so the WebView
+ * lays out at 980 CSS px and scales that to the screen, and the initial containing block
+ * is fixed at the 980-wide geometry. A page whose content is wider than 980 overflows,
+ * loadWithOverviewMode zooms further out to fit it, and the reader can then see more CSS
+ * px of height than 100vh reports. Measured on the phone: an ordinary widescreen deck is
+ * 1279 px wide and shows 2467 px of height against a 100vh that stays at 1886.
+ *
+ * window.innerHeight is the number that is right, and it is the one to use rather than
+ * visualViewport.height, which shrinks as the reader pinches in. Centring against that
+ * would move the document under the gesture; innerHeight holds still through a pinch and
+ * changes only when the screen does.
+ *
+ * Call this once the document is in the DOM, because it is the content overflowing that
+ * changes the answer and no resize is fired when that happens. The listener bound here is
+ * for rotation, which does fire one, and is the only word the page gets: ViewerActivity
+ * declares configChanges and never rebuilds. It binds on first call rather than on load
+ * so that the viewers with nothing to centre do not carry it.
+ */
+var vwFitBound = false;
+
+function vwFitHeight() {
+  if (!vwFitBound) {
+    vwFitBound = true;
+    addEventListener("resize", vwFitHeight);
+  }
+  document.documentElement.style.setProperty("--vw-fit", window.innerHeight + "px");
+}
+
 function vwDocUrl() {
   return "/doc/file" + (vwExt ? "." + vwExt : "");
 }
