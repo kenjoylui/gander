@@ -21,7 +21,44 @@
      700 it replaces was 29.1, so a page sits against exactly as much contrast as it did
      before and only the temperature has moved. */
   body { background: #48443D; }
-  #pages { padding: 8px 0; }
+
+  /*
+   * Where the document sits when there is less of it than there is screen.
+   *
+   * A single A4 page fitted to the width of a phone is about 1.4 screen widths tall
+   * where the screen is about 2.2, so a one-page PDF stood at the top with a third of
+   * the display left as surround below it. Every viewer of a fixed sheet puts one in
+   * the middle instead, imgweb.html here included, so this makes a page agree with a
+   * photograph.
+   *
+   * One static rule, and nothing measured, which is the whole reason it is written this
+   * way. min-height leaves the container free to grow, so a document taller than the
+   * screen has no free space, justify-content has nothing to distribute, and the layout
+   * is the one that was there before. Only a document that already fits moves.
+   *
+   * On #pages rather than on the body, where the same centring would be shorter to
+   * write. #vw-status is a child of the body and not of this, so the rendering card,
+   * the error card and the password prompt keep the position they have always had and
+   * this says nothing about them.
+   *
+   * Two details are load bearing. border-box, or the 8px of padding would fall outside
+   * the 100vh and give every short document sixteen pixels of rubber band to pull
+   * against. And flex: none, so that a column flex container can never decide to shrink
+   * a page out of the aspect-ratio it was measured at.
+   *
+   * 100vh is the layout viewport, 980 CSS px wide and as tall as the WebView scaled to
+   * match, per the note in the head. That is the same reference imgweb.html's
+   * height: 100% already resolves against in this same WebView.
+   */
+  #pages {
+    box-sizing: border-box;
+    padding: 8px 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  #pages > .pg { flex: none; }
 
   /*
    * Night mode, issue #19. Two colours here; the picture on the page is turned over
