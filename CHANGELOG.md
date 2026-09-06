@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.15 (2026-09-06)
 
 - A document that fits on the screen sits in the middle of it. A PDF or Word page is about
   two thirds of a phone screen tall and a slide is under a third, so a one-page document or
