@@ -1515,13 +1515,13 @@ class ViewerActivity : AppCompatActivity() {
         pageFader.hideNow()
         fastScrollEnabled = false
         hideFastScrollNow()
-        findViewById<MaterialToolbar>(R.id.toolbar).menu
-            .findItem(R.id.action_search)?.isVisible = false
-        // Night mode goes with it: the channel it speaks over is closed on the next
-        // line, so leaving it on screen would keep rewriting the stored preference at
-        // a port nothing is listening to.
-        findViewById<MaterialToolbar>(R.id.toolbar)
-            .menu.findItem(R.id.action_night_mode)?.isVisible = false
+        // Night mode goes with the search item: the channel both of them speak over is
+        // closed two lines down, so leaving either on screen offers a control that does
+        // nothing, and night mode would go on rewriting the stored preference at a port
+        // nothing is listening to.
+        val goneMenu = findViewById<MaterialToolbar>(R.id.toolbar).menu
+        goneMenu.findItem(R.id.action_search)?.isVisible = false
+        goneMenu.findItem(R.id.action_night_mode)?.isVisible = false
         closeSearchChannel()
 
         container.removeAllViews()
