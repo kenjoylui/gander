@@ -4,14 +4,14 @@ Gander is an offline document viewer for Android. Open a PDF, a Word document, a
 
 Every format you are likely to be sent:
 
-* PDF documents, rendered page by page, pinch to zoom
-* Word documents (.docx)
-* Excel spreadsheets (.xlsx, .xls, .xlsm, .xlsb, .csv, .ods), with tabs for multi-sheet workbooks
-* PowerPoint slides (.pptx)
-* Photos: JPG, PNG, WebP, HEIC, BMP, GIF, SVG, AVIF and more
-* Video: MP4, MKV, WebM, MOV and more
-* Audio: MP3, M4A, FLAC, WAV, OGG, Opus
-* Markdown, plain text, and source code
+- PDF documents, rendered page by page, pinch to zoom
+- Word documents (.docx)
+- Excel spreadsheets (.xlsx, .xls, .xlsm, .xlsb, .csv, .ods), with tabs for multi-sheet workbooks
+- PowerPoint slides (.pptx)
+- Photos: JPG, PNG, WebP, HEIC, BMP, GIF, SVG, AVIF and more
+- Video: MP4, MKV, WebM, MOV and more
+- Audio: MP3, M4A, FLAC, WAV, OGG, Opus
+- Markdown, plain text, and source code
 
 Private by construction, and you can check it
 
@@ -25,11 +25,12 @@ Gander opens the file you hand it, through the system file picker, through "Open
 
 Built for reading on a phone
 
-* Find in document: search inside PDF, Word, Excel, PowerPoint, Markdown, text and code, with match navigation
-* Open password protected PDFs by entering the password
-* Deep zoom into large photos with tiled decoding, and correct rotation read from EXIF
-* Share the open file onward, save a copy of it, or jump to the folder it sits in
-* Material 3 design, dark mode, edge to edge
+- Find in document: search inside PDF, Word, Excel, PowerPoint, Markdown, text and code, with match navigation
+- Open password protected PDFs by entering the password
+- Night mode for PDFs: paper goes black and text goes white, colours keep their hue, and photographs are left exactly as they were printed
+- Deep zoom into large photos with tiled decoding, and correct rotation read from EXIF
+- Share the open file onward, save a copy of it, or jump to the folder it sits in
+- Material 3 design, dark mode, edge to edge
 
 Small, and one download for every phone
 
@@ -37,10 +38,10 @@ About 5 MB, a single build that runs on every processor with no native code at a
 
 Honest about what it is not
 
-* Gander is a viewer, not an editor
-* Legacy binary .doc and .ppt are not supported. Binary .xls is
-* Complex PowerPoint decks render approximately, and spreadsheet charts are not drawn
-* Viewing PDFs needs Android System WebView 125 or newer, and Gander says so plainly if yours is older
+- Gander is a viewer, not an editor
+- Legacy binary .doc and .ppt are not supported. Binary .xls is
+- Complex PowerPoint decks render approximately, and spreadsheet charts are not drawn
+- Viewing PDFs needs Android System WebView 125 or newer, and Gander says so plainly if yours is older
 
 If you want an offline PDF and document viewer that simply shows your files and keeps its hands off everything else, that is Gander.
 
