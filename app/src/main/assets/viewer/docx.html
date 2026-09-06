@@ -7,9 +7,10 @@
 <style>
   /*
    * Where the document sits when there is less of it than there is screen, the same as
-   * pdf.html and pptx.html do. A Letter page fitted to the width of a phone is a little
-   * over half a screen tall, so a three-line letter stood at the top with two fifths of
-   * the display left as empty ground below it.
+   * pdf.html and pptx.html do. A Letter page drawn at the width of a phone was a little
+   * over half a screen tall when this was written, and is about two thirds now that the
+   * rule below fills the width; either way a three-line letter stood at the top with the
+   * rest of the display left as empty ground below it.
    *
    * Only three declarations are new. docx-preview's own stylesheet already makes this a
    * column flex container and gives it align-items: center, which is what has always put
@@ -35,12 +36,34 @@
     min-height: var(--vw-fit, 100vh);
     justify-content: center;
   }
-  /* flex: none because docx-preview leaves these shrinkable. Their min-height holds them
-     up today, so this is guarding the invariant rather than fixing a bug. */
+  /*
+   * A page fills the width of the screen, the way a PDF page and a slide already do.
+   *
+   * docx-preview writes the section its real paper width, 612pt for Letter and 595pt for
+   * A4, which lands at 816 and 794 CSS px against the 980 this WebView lays out at. So a
+   * Word page has been drawn at 83% of the screen with the rest left as ground, and it is
+   * worse than that from the reader's side: the document's own 90pt page margins are
+   * inside those 816 px, so the column of text was 576 px, under sixty per cent of the
+   * screen, where a PDF of the same paper gets all of it.
+   *
+   * zoom and not transform: scale, and that is the whole reason this is workable. A
+   * transform paints at a different size and leaves the layout box alone, so the page
+   * would sit in a hole its old size and the centring above would be measuring the wrong
+   * box. zoom scales the layout too, so every height that follows from the page still
+   * adds up. Nothing is reflowed and no line break moves; it is the same page, larger.
+   *
+   * The ratio is fitPageWidth()'s to work out, because only it knows how wide the paper
+   * turned out to be. The fallback of 1 is what an engine without custom properties gets,
+   * and it is the page exactly as it was drawn before this rule existed.
+   *
+   * flex: none because docx-preview leaves these shrinkable. Their min-height holds them
+   * up today, so that half is guarding the invariant rather than fixing a bug.
+   */
   .docx-wrapper > section.docx {
     box-shadow: 0 1px 6px rgba(0,0,0,0.25) !important;
     margin-bottom: 16px !important;
     flex: none;
+    zoom: var(--vw-page-zoom, 1);
   }
 
   /* The surround only. section.docx is the page itself, and a page is paper: it stays
@@ -78,6 +101,59 @@ function fixSymbolChars(root) {
   }
 }
 
+/*
+ * Scale the pages so the widest of them fills the screen, for the zoom in the stylesheet.
+ *
+ * The widest and not the first: a document can mix portrait and landscape sections, and
+ * sizing off page one would push a landscape page past the layout width, widen the
+ * viewport for the whole document, and shrink every portrait page to pay for it. Taking
+ * the widest means nothing overflows and the pages keep their real proportions to each
+ * other, which is the point of drawing them as paper at all.
+ *
+ * That is a trade, and only for a document that mixes the two. Measured on such a one:
+ * its portrait pages go from 80.2% of the screen to 76.1%, while its landscape page goes
+ * from 103.7%, which is to say wider than the screen and needing a sideways drag to read,
+ * to 98.5% and whole. A document of one orientation, which is nearly all of them, only
+ * gains: 83% to 98%.
+ *
+ * The ratio is reset to 1 before measuring rather than divided out of the last one,
+ * because a zoomed element reports its zoomed width and two roundings of that would
+ * drift. Writing the property forces the recalculation that the read below needs.
+ *
+ * That reset is doing a second job, and it is the reason not to optimise it away. Whether
+ * getBoundingClientRect reports a zoomed element's box with the zoom in it changed when
+ * zoom was standardised, around Chromium 128: WebView 152 includes it and WebView 103,
+ * checked on an emulator, does not. Measuring at 1 means this never has to know which,
+ * because at 1 the two agree. The rendering is right on both; it is only the reading back
+ * that differs, which is worth knowing before believing a rect on an older engine.
+ *
+ * A page already wider than the screen, which a landscape one is, comes out under 1 and
+ * is shrunk to fit. That is the same size it reaches today by overflowing and making the
+ * WebView zoom out to fit it, and it costs the document nothing, but it keeps the layout
+ * viewport at 980 where the overflow route moves it.
+ *
+ * Not re-run on rotation, where vwFitHeight is. The width this divides by is the WebView's
+ * own layout width, which is 980 in both orientations because there is no viewport meta
+ * for the turn to reinterpret, so the ratio a rotation would arrive at is the one already
+ * set. Checked on the phone: 1.181 in portrait and in landscape.
+ */
+function fitPageWidth() {
+  var wrap = document.querySelector(".docx-wrapper");
+  var pages = wrap ? wrap.querySelectorAll("section.docx") : [];
+  if (!pages.length) return;
+
+  wrap.style.setProperty("--vw-page-zoom", "1");
+  var pad = getComputedStyle(wrap);
+  var room = wrap.clientWidth -
+    parseFloat(pad.paddingLeft || 0) - parseFloat(pad.paddingRight || 0);
+
+  var widest = 0;
+  for (var i = 0; i < pages.length; i++) {
+    widest = Math.max(widest, pages[i].getBoundingClientRect().width);
+  }
+  if (room > 0 && widest > 0) wrap.style.setProperty("--vw-page-zoom", room / widest);
+}
+
 vwFetchDoc("buffer")
   .then(function (buf) {
     return docx.renderAsync(buf, document.getElementById("container"), null, {
@@ -90,7 +166,9 @@ vwFetchDoc("buffer")
   })
   .then(function () {
     fixSymbolChars(document.getElementById("container"));
-    /* Once the pages exist, because it is they that decide how wide the document is. */
+    /* Width first: it decides whether the document still overflows 980, which is the
+       one thing that moves the height vwFitHeight is about to read. */
+    fitPageWidth();
     vwFitHeight();
     vwStatusDone();
   })
