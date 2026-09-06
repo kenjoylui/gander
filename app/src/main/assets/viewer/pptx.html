@@ -10,6 +10,45 @@
   /* Warm, and lightness-matched to the Blue Grey 900 it replaces: L* 20.1 against
      20.0, so a slide stands off its ground exactly as far as it did. */
   body { background: #343029; }
+
+  /*
+   * Where a deck sits when there is less of it than there is screen, which is what
+   * pdf.html does for a page. A slide is 16:9, so one of them is under a third of a
+   * phone screen tall: a one-slide deck stood at the top with seventy per cent of the
+   * display left as empty ground below it.
+   *
+   * pdf.html centres against min-height: 100vh, and copying that here would be wrong.
+   * A PDF page is width: 100%, so that file lays out at the WebView's own 980 CSS px
+   * and 100vh is the screen. A slide is not: pptxjs sizes it from the deck, and an
+   * ordinary widescreen deck is 1279 px, wider than 980. The document overflows,
+   * loadWithOverviewMode zooms further out to fit it, and the reader can now see more
+   * of the page than before, but the initial containing block does not move. Measured
+   * on the phone: 100vh stays at 1886 while the screen is showing 2467. Centre against
+   * it and a one-slide deck lands a quarter of a screen too high.
+   *
+   * window.innerHeight is the number that is right. It reports what the reader can
+   * see, it accounts for the zoom out, and unlike visualViewport.height it does not
+   * move when they pinch, so nothing shifts under a gesture. CSS cannot ask for it, so
+   * fitHeight() below publishes it as --vw-fit. The 100vh fallback is what applies for
+   * the moment before that runs, and for a deck narrow enough that the two agree.
+   *
+   * As in pdf.html, min-height leaves the container free to grow, so a deck taller
+   * than the screen has no free space to distribute and lays out exactly as it did.
+   * Only a deck that already fits moves.
+   *
+   * height: auto on the wrapper is not tidying. pptxjs writes it an inline height of
+   * numOfSlides * slideHeight, which counts none of the 14px between slides, so the
+   * box it declares is up to thirty pixels shorter than the slides in it and centring
+   * that box would leave them low by half of that.
+   */
+  #result {
+    box-sizing: border-box;
+    min-height: var(--vw-fit, 100vh);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  #result > .slides { flex: none; height: auto !important; }
   #result .slide { margin: 14px auto; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
 </style>
 <script src="lib/pptx/jquery.min.js"></script>
@@ -35,11 +74,22 @@ try {
 } catch (e) {
   vwError("Could not render this presentation", String(e));
 }
+/* The height the reader can actually see, for the rule at the top of this file that
+   cannot ask CSS for it. Read once the slides exist, because it is the slides
+   overflowing 980 px that makes the WebView zoom out and moves this number, and again
+   on resize, which is how a rotation arrives while ViewerActivity handles the config
+   change itself and never rebuilds. */
+function fitHeight() {
+  document.documentElement.style.setProperty("--vw-fit", window.innerHeight + "px");
+}
+addEventListener("resize", fitHeight);
+
 var vwChecks = 0;
 var vwPoll = setInterval(function () {
   vwChecks++;
   var slides = document.querySelectorAll("#result .slide");
   if (slides.length > 0) {
+    fitHeight();
     vwStatusDone();
     clearInterval(vwPoll);
   } else if (vwChecks > 40) {

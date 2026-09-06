@@ -2,10 +2,11 @@
 
 ## Unreleased
 
-- A PDF that fits on the screen sits in the middle of it. One page is about two thirds of
-  a phone screen tall, so a single-page document stood at the top with a band of empty
-  grey below it rather than in the middle, where the eye rests and where a photograph in
-  Gander has always gone. Anything longer than the screen is exactly where it was.
+- A document that fits on the screen sits in the middle of it. A PDF page is about two
+  thirds of a phone screen tall and a slide is under a third, so a one-page PDF or a short
+  deck stood at the top with a band of empty ground below it rather than in the middle,
+  where the eye rests and where a photograph in Gander has always gone. Anything longer
+  than the screen is exactly where it was.
 
 - Night mode for PDFs, from the viewer's menu. A page stayed white at midnight however the
   phone was set, which is right for a Word page and wrong for reading a long PDF in bed.
