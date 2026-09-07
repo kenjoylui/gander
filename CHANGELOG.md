@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Dragging to select text in a PDF follows your finger. It used to freeze partway and then
+  jump, taking a heading, the rest of a paragraph or a whole page with it. Two things were
+  behind it. WebView floors rendered text at 8 pixels where Chrome does not, and pdf.js
+  measures that floor and lays every word out eight times too large to compensate, which
+  left the selection resolving to the page rather than to the words on it. And a text layer
+  only covers the words themselves, so the space between lines, beside a short line, and in
+  a page's margins belonged to nothing a finger could land on; a touch that missed every
+  word got the same answer wherever it was, which is what the freeze was. Lines are now
+  given the space around them, out to the next word along and to the page edges, and the
+  margin between two pages is bridged so a selection can cross it. Nothing moves on the
+  page: the words are where they always were, and a highlight still hugs the text.
+
 - Removing several recents or folders quickly shows one "Removed" badge rather than one per
   removal. The framework queues badges and plays each for its full couple of seconds, so a
   dozen removals in a burst kept a badge on screen for another half a minute after the last

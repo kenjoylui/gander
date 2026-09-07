@@ -22,6 +22,11 @@
      before and only the temperature has moved. */
   body { background: #48443D; }
 
+  /* The strip between two pages. One declaration, three consumers: .pg's margin draws
+     it, .vw-gap bridges it so a selection can cross it, and PAGE_PITCH counts it into
+     the draw and keep bands. They disagreeing is a bug in each of those three ways. */
+  :root { --pg-gap: 8px; }
+
   /*
    * Where the document sits when there is less of it than there is screen.
    *
@@ -119,7 +124,7 @@
   .pg {
     position: relative;
     display: block;
-    margin: 0 auto 8px;
+    margin: 0 auto var(--pg-gap);
     background: #fff;
     box-shadow: 0 1px 6px rgba(0,0,0,0.35);
     width: 100%;
@@ -143,6 +148,45 @@
      * page whose canvas is 0x0 still stands at its full height and nothing moves.
      */
     aspect-ratio: var(--pg-ratio, 0.7071);
+  }
+
+  /*
+   * The strip between two pages, made part of the page above it.
+   *
+   * That gap is .pg's own margin, so it belongs to #pages and lies inside no text
+   * layer. A finger crossing it is over no span, and Blink answers a container with
+   * nothing in flow with the same position wherever it is asked, which here is a whole
+   * page. Traced at a page boundary: a selection went from 236 characters to 3895 in
+   * one event and the view scrolled 804px to follow it, which looked like a scroll bug
+   * and was the original runaway surviving in the one place padRows() cannot reach.
+   *
+   * A sibling of the text layer rather than part of it, and this is the whole reason it
+   * is a separate element. pdf.js positions every span with a percentage top, so making
+   * the layer eight pixels taller moves every word down by a fraction of eight pixels,
+   * most at the foot of the page. That was tried, and the selection came away from the
+   * text everywhere. The layer's height is load bearing and cannot be touched; a
+   * sibling inside .pg costs nothing and escapes the layer's overflow: clip.
+   *
+   * Last in .pg, so that in document order it falls after every word on this page and
+   * before the first word of the next, which is what a caret landing in it should mean.
+   */
+  .pg > .vw-gap {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    height: var(--pg-gap);
+    /*
+     * Selectable, and that is a guard rather than a statement of the default.
+     *
+     * Nothing here sets user-select: none on an ancestor of this, so the caret lands in
+     * it either way; measured, and the seam reads identically with this line reverted.
+     * It is declared so that staying true is a property of this rule rather than of
+     * what the rest of the stylesheet happens not to say, the same argument as the
+     * spacing properties on .hiddenCanvasElement. Without it, an ancestor rule added
+     * later would silently reopen the strip.
+     */
+    user-select: text;
   }
 
   .pg > canvas {
@@ -306,18 +350,6 @@
 
   /* An image standing in for text is not text to select. */
   .textLayer span[role="img"] { user-select: none; cursor: default; }
-
-  /* pdf.js appends this to bound a selection dragged past the last line. It has to
-     exist and take part in layout, which is why it is not display:none. */
-  .textLayer .endOfContent {
-    display: block;
-    position: absolute;
-    inset: 100% 0 0;
-    z-index: 0;
-    cursor: default;
-    user-select: none;
-  }
-  .textLayer.selecting .endOfContent { top: 0; }
 
   /*
    * pdf.js's measuring canvas, which is not part of any page.
@@ -1704,10 +1736,215 @@ function textLayerFor(slot, page, viewport) {
     viewport: viewport
   });
   slot.layer = layer;
-  return layer.render().catch(function () {
+  return layer.render().then(function () {
+    padRows(slot.text, layer.textDivs);
+  }, function () {
     if (slot.layer === layer) slot.layer = null;
     slot.text.replaceChildren();
   });
+}
+
+/*
+ * A note on what is deliberately not here.
+ *
+ * pdf.js's viewer bounds a stray selection with an .endOfContent block that it moves
+ * next to the growing end of the range on every selectionchange, and this file carried
+ * a port of it. It is gone, and the stylesheet rules for it with it, because padRows()
+ * below leaves nothing for it to catch: measured across the two documents from issue
+ * #22, hit boxes now cover 100% of a page and 96% of the worst illustrated one, where
+ * that machinery existed only to answer the uncovered part.
+ *
+ * It was not free, either. It ran on every selectionchange, which a finger produces
+ * about fifty times a second, and moved the block in every registered layer. When that
+ * churn landed in a layer above the viewport, Chromium's scroll anchoring compensated
+ * and jumped the view: traced at 3418 to 2899 in a single step. Guarding the churn made
+ * it cheaper; removing it makes a drag touch the DOM not at all.
+ *
+ * If a document ever turns up that padRows() cannot cover, the symptom is a selection
+ * that freezes at a constant length while the finger keeps moving, and the answer is to
+ * find the hole rather than to put this back.
+ */
+
+/*
+ * Covering the page with hit boxes, so that a finger dragging a selection always has
+ * a word under it. Issue #22.
+ *
+ * pdf.js sizes a span to its glyphs. A line box is therefore the height of the type and
+ * no wider than the words on it, so the leading between lines, the space to the right
+ * of a short line, the left margin and the page margins all belong to no span at all.
+ * Measured here: 64% of a page was inside a span box.
+ *
+ * Why that is fatal rather than untidy. Every span in this layer is absolutely
+ * positioned, so the layer itself has no in-flow content. When a touch lands outside
+ * every span, Blink falls back to asking the container for a position, and a container
+ * with nothing in flow answers the same thing wherever it is asked. Traced on a phone:
+ * the selection climbed smoothly to 1002 characters, then froze for 3.7 seconds across
+ * 190 consecutive events with the focus on the layer rather than a span, and then
+ * jumped straight past a heading and a paragraph to 2482. It is not slow tracking, it
+ * is one constant position being returned while the reader keeps moving.
+ *
+ * So the requirement is not "mostly covered", it is covered. The page is sampled at
+ * 9,604 points in the test that settled this, and every one of them has to be inside
+ * some span's box. Anything less leaves a band the drag dies in.
+ *
+ * A mouse never showed this because it lands where it is pointed and there is always
+ * a word within a pixel or two. Upstream measures the same 64% and would freeze the
+ * same way; this is a deliberate divergence, for touch.
+ *
+ * Padding, never geometry, so that pdf.js's own placement is untouched: padding grows a
+ * box away from an edge that has already been positioned, and the negative margins put
+ * the box's own edge back where the span's scaleX() lands the glyphs unmoved. Verified
+ * by measuring the client rect of every span's text node before and after, which is
+ * identical to the pixel.
+ *
+ * Gaps between lines are split half to the line above and half to the line below, so a
+ * point in a gap joins whichever line it is nearer, and no single line grows a hit box
+ * the height of the space before a section heading. There is no cap: a cap leaves the
+ * middle of a large gap uncovered, which is the freeze again, and this was measured
+ * failing at exactly that spot with a cap of two line-heights.
+ *
+ * The visible cost is that a selection highlight now fills the space it covers, so the
+ * last line of a paragraph and a short heading are drawn full width. That is the same
+ * box that has to be hittable, and it cannot be one size for the finger and another for
+ * the paint without a second layer of elements.
+ */
+/* Rows are sorted twice, so the comparators are shared rather than a fresh closure
+   per row per page. */
+function byTopThenLeft(a, b) { return a.top - b.top || a.left - b.left; }
+function byLeft(a, b) { return a.left - b.left; }
+
+function padRows(container, divs) {
+  var layer = container.getBoundingClientRect();
+  /*
+   * The three numbers this needs are already written down, so none of them is measured
+   * back out of a computed style.
+   *
+   * pdf.js writes --scale-x and --rotate inline on each span and --min-font-size once
+   * on the container; the stylesheet contract above says so. The transform it composes
+   * is rotate() scaleX(--scale-x) scale(1 / --min-font-size), so a padding written here
+   * is not rendered at the size it is written: sideways it is scaled by
+   * --scale-x / --min-font-size, and not by --scale-x, and downwards by
+   * 1 / --min-font-size. Measured on a phone, that is 1.3% for a min font size of
+   * 1.013, and 8x on a WebView left at its default floor of 8. Every padding below is
+   * therefore divided by the scale its own axis is drawn at.
+   *
+   * Getting the vertical half of that wrong is not cosmetic and is worth knowing the
+   * shape of, because both symptoms look like something else. Padding that falls 1.3%
+   * short leaves 1.3% of every gap uncovered, which is a hairline in a line gap and
+   * 6.6px in the blank above a chapter opening, and an uncovered band is the freeze
+   * this whole function exists to prevent. It also drags the words off the picture:
+   * the margin below is in layout px and the padding it cancels is not, so the glyphs
+   * come to rest 1.3% of the padding above where pdf.js put them, which is nothing on
+   * an ordinary line and 4.7px on the one after a large gap.
+   */
+  var mfs = parseFloat(container.style.getPropertyValue("--min-font-size")) || 1;
+
+  /* Read every rect before writing any padding. Interleaving the two makes the browser
+     lay the page out again on each span, which on a dense page is hundreds of times. */
+  var boxes = [];
+  for (var i = 0; i < divs.length; i++) {
+    var el = divs[i];
+    /*
+     * Rotated text is left alone, a span at a time rather than a page at a time.
+     *
+     * Everything below reads horizontal lines out of vertical positions: it groups
+     * spans by their top and grows them down and sideways. On a rotated span that means
+     * nothing and the padding would land across the words rather than around them. So
+     * skip it, and let the rest of the page still be covered; a caption printed
+     * sideways should not cost the page it sits on. A page rotated in its entirety ends
+     * up padded nowhere, which is where this file was before any of it.
+     */
+    var rot = el.style.getPropertyValue("--rotate");
+    if (rot && parseFloat(rot)) continue;
+    var r = el.getBoundingClientRect();
+    if (!r.height) continue;
+    boxes.push({
+      el: el, top: r.top, bottom: r.bottom, left: r.left, right: r.right,
+      sx: (parseFloat(el.style.getPropertyValue("--scale-x")) || 1) / mfs
+    });
+  }
+  if (boxes.length < 2) return;
+  boxes.sort(byTopThenLeft);
+
+  var rows = [];
+  var row = null;
+  for (var j = 0; j < boxes.length; j++) {
+    var b = boxes[j];
+    /* A new row when this span starts below the one before it. Two spans on the same
+       line share a top to within rounding, so the tolerance is small and absolute. */
+    if (!row || b.top - row.top > 2) {
+      row = { top: b.top, bottom: b.bottom, items: [b] };
+      rows.push(row);
+    } else {
+      row.bottom = Math.max(row.bottom, b.bottom);
+      row.items.push(b);
+    }
+  }
+
+  for (var v = 0; v < rows.length; v++) {
+    var here = rows[v];
+    /*
+     * What this row owns, vertically. Half the gap to the row above and half the gap to
+     * the row below, so a point in a gap joins whichever line it is nearer and no
+     * single line grows a hit box the height of the space before a section heading.
+     * The first row takes the page margin above it whole, having no row to share with,
+     * and the last row takes the rest of the page.
+     *
+     * No cap: a cap leaves the middle of a large gap uncovered, which is the freeze
+     * this exists to prevent, and it was measured failing at exactly that spot with a
+     * cap of two line-heights.
+     */
+    var up = v ? (here.top - rows[v - 1].bottom) / 2 : here.top - layer.top;
+    var floor = (v + 1 < rows.length)
+      ? here.bottom + (rows[v + 1].top - here.bottom) / 2
+      : layer.bottom;
+
+    /* Left to right, so a gap belongs to the span before it, which is reading order and
+       so the answer a reader expects when they land in one. Sorted in place: the rows
+       were built off a top-then-left sort, so this is usually already true, but two
+       spans a pixel apart vertically would come out of it the wrong way round. */
+    var across = here.items;
+    across.sort(byLeft);
+
+    for (var x = 0; x < across.length; x++) {
+      var it = across[x];
+      var style = it.el.style;
+      /* Down to its row's share of the gap, measured from this span's own bottom: a row
+         can mix type sizes, a heading beside a caption, and padding each item the same
+         amount from where it happens to end leaves a sliver under every short one. */
+      var down = floor - it.bottom;
+      if (down > 0.5) style.paddingBottom = (down * mfs).toFixed(2) + "px";
+      if (up > 0.5) {
+        style.paddingTop = (up * mfs).toFixed(2) + "px";
+        /* Cancels the padding so the glyphs stay where pdf.js put them: the box top
+           moves up by exactly what the padding pushes the text down by. Not scaled,
+           where the padding above it is, because the two are in different spaces: a
+           margin moves the box before the transform is applied, and the padding is
+           measured inside a box the transform has already shrunk. */
+        style.marginTop = (-up).toFixed(2) + "px";
+      }
+      /*
+       * Sideways to the next span along the row, and to the page edge at its ends.
+       *
+       * Reaching only the two margins would leave every gap inside a row open: the
+       * gutter between columns, the space between table cells, the white beside a
+       * figure. And a heading reaches perhaps a sixth of the way across, so a finger
+       * dragged down the middle of the column passes through the empty space beside it
+       * and lands on nothing, which is why sections went on failing after paragraphs
+       * were fixed.
+       */
+      var until = (x + 1 < across.length) ? across[x + 1].left : layer.right;
+      var reach = until - it.right;
+      if (reach > 1) style.paddingRight = (reach / it.sx).toFixed(2) + "px";
+    }
+
+    var first = across[0];
+    var leftNeed = first.left - layer.left;
+    if (leftNeed > 1) {
+      first.el.style.paddingLeft = (leftNeed / first.sx).toFixed(2) + "px";
+      first.el.style.marginLeft = (-leftNeed).toFixed(2) + "px";
+    }
+  }
 }
 
 /*
@@ -2594,6 +2831,14 @@ if (!vwPdfBlocked) {
         var tl = document.createElement("div");
         tl.className = "textLayer";
         box.appendChild(tl);
+        /* Bridges the margin below this page so a selection can cross into the next
+           one; see the .vw-gap rule. Built here rather than when the page is drawn
+           because it depends on nothing about the content, and last in .pg so that in
+           document order it falls after every word on this page. The tile canvas goes
+           in with insertBefore(canvas, slot.text), so it stays last. */
+        var gap = document.createElement("div");
+        gap.className = "vw-gap";
+        box.appendChild(gap);
         var slot = {
           n: i, box: box, canvas: c, text: tl,
           state: "blank", mode: null, pictures: null, task: null, page: null, layer: null,
@@ -2633,8 +2878,11 @@ if (!vwPdfBlocked) {
       pages.style.setProperty(
         "--pg-ratio", String(unscaled.width / unscaled.height));
       /* Derived rather than measured: the same number the CSS above will lay out to,
-         without a layout read to ask what it did. The 8 is .pg's bottom margin. */
-      PAGE_PITCH = PAGE_WIDTH * (unscaled.height / unscaled.width) + 8;
+         without a layout read to ask what it did. The gap is read from --pg-gap rather
+         than written here a second time; see the token's note in the stylesheet. */
+      PAGE_PITCH = PAGE_WIDTH * (unscaled.height / unscaled.width) +
+        (parseFloat(getComputedStyle(document.documentElement)
+          .getPropertyValue("--pg-gap")) || 8);
       return draw(slots[0]);
     })
     .then(function () {

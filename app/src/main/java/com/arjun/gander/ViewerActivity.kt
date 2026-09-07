@@ -1402,6 +1402,35 @@ class ViewerActivity : AppCompatActivity() {
             loadWithOverviewMode = true
             allowFileAccess = false
             allowContentAccess = false
+            /*
+             * WebView's own floor on rendered text, which is 8 and is not neutral here.
+             *
+             * It exists so that a web page cannot make body text unreadably small. A
+             * document is not a web page: its type sizes are the author's, the reader
+             * can pinch, and a floor silently rewrites the smallest of them.
+             *
+             * For the PDF viewer it is worse than cosmetic, because pdf.js measures it.
+             * TextLayer renders a 1px probe and reads back its height, then, finding 8,
+             * lays every text span out at eight times the size it wants and scales it
+             * back down by 1/8 so the words still land on the picture. That worked, and
+             * it left every span in the selection layer with a layout box eight times
+             * the glyphs it covers. Chromium's touch selection then resolved a drag to
+             * the layer rather than to the words in it, and a selection dragged with a
+             * finger stopped tracking: 584 of 600 moves in a row landing in the same
+             * place, which is issue #22.
+             *
+             * At 1 the probe reads 1, pdf.js skips the compensation, and a span's box
+             * is the size of its own text again. Measured against pdf.js's own viewer
+             * in Chrome, which reads 1 because Chrome has no such floor, and which
+             * tracks a finger correctly.
+             *
+             * PDF only, deliberately. The argument that a document's type sizes are the
+             * author's holds for the Word, slide and spreadsheet viewers too, and the
+             * floor is silently rewriting them there as well. But nothing has been
+             * measured going wrong in those, and the way to find out is to look rather
+             * than to change five viewers on the strength of one.
+             */
+            if (kind == FileKind.PDF) minimumFontSize = 1
         }
 
         val assetLoader = WebViewAssetLoader.Builder()
