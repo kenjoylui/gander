@@ -1948,6 +1948,113 @@ function padRows(container, divs) {
 }
 
 /*
+ * Keeping the page under a selection that has been dragged to the edge of it.
+ *
+ * A handle held against the bottom of the screen does not scroll the document, so a
+ * reader can select as far as the fold and no further without letting go, scrolling,
+ * and starting again. That is not a WebView shortcoming and not something this file
+ * caused. Measured on a phone, Chrome for Android does the same on an ordinary page of
+ * paragraphs, and so does this app's own text viewer, which lays out at device width
+ * and has no text layer within reach of it.
+ *
+ * What does happen, and what makes dragging upward look as though it works, is Blink
+ * revealing an extent that has landed outside the viewport. Drag the start handle up
+ * and the line under the finger begins above the top edge, so the reveal scrolls by
+ * that overshoot: one line, traced at 32 px. Drag the end handle down and there is
+ * nothing to reveal, because the deepest thing the finger can be over is the last line
+ * already fully on screen. Traced holding at the bottom edge: the extent sat at 1829 of
+ * an 1886 px viewport and the scroll offset did not move for four seconds.
+ *
+ * So the scroll has to come from here, and selectionchange is the only thing to hang it
+ * on. A handle drag produces no pointerdown, no pointermove and no pointerup at all -
+ * the handle is a native widget and the page is never told the finger exists - and the
+ * only other event of the whole gesture is a contextmenu when it comes off.
+ *
+ * Event driven rather than a timer, and that is the design rather than a shortcut. From
+ * in here a finger held still and a finger lifted are the same thing, so a timer armed
+ * at the edge would have nothing trustworthy to stop it, and it would scroll the
+ * document out from under a selection that cannot follow it: scrolling alone does not
+ * re-resolve the extent, which stays where it was until the finger next moves. One step
+ * per change cannot run away, and cannot outrun the selection either.
+ *
+ * The step is how far past the band the extent landed, which is how hard the reader is
+ * pushing at the edge, and it settles by itself: after each scroll the extent
+ * re-resolves under the finger at the same depth, so a constant finger position gives a
+ * constant speed. Measured on rustbook.pdf, 64 px a step and 1184 px across the 23
+ * events of one drag held there.
+ *
+ * The known limit is a finger that does not move at all. Nothing re-resolves, no event
+ * arrives, and the page stops - which is where this started, so the worst case is the
+ * behaviour without it, and the noise a finger makes resting on glass is enough to keep
+ * it going.
+ *
+ * The band is in dp and not in CSS px because it is a distance on a screen that a thumb
+ * has to be able to land in, and this page's CSS px is whatever zoom-to-fit made it;
+ * see the note in the head. Dividing by the visual viewport's scale is that conversion,
+ * and it also holds the band still on the screen across a pinch.
+ *
+ * It reads one rect and never touches the DOM, so the note above about a drag no longer
+ * mutating anything still holds. Measured across a drag on this 354 page document: 0.2
+ * ms median and 0.4 ms worst.
+ */
+var SELECT_EDGE_DP = 50;
+var SELECT_EDGE_MIN = 10;
+var SELECT_GAP_MS = 700;
+var selectPrevY = null;
+var selectPrevT = 0;
+
+/* The extent's own rect, not the selection's. A selection's box spans everything
+   between its two ends, so by the time any of this matters its bottom is most of the
+   document away; a collapsed range at the focus is the end the finger is holding. */
+function extentRect(sel) {
+  try {
+    var r = document.createRange();
+    r.setStart(sel.focusNode, sel.focusOffset);
+    r.collapse(true);
+    var rects = r.getClientRects();
+    if (rects.length) return rects[0];
+    /* An extent resolved to an element rather than into a text node has no rect of its
+       own. padRows() above is what makes that rare rather than the usual case. */
+    if (sel.focusNode.nodeType === 1) return sel.focusNode.getBoundingClientRect();
+  } catch (e) {}
+  return null;
+}
+
+function selectionEdgeScroll() {
+  var sel = window.getSelection();
+  if (!sel || !sel.rangeCount || sel.isCollapsed) { selectPrevY = null; return; }
+  var rect = extentRect(sel);
+  if (!rect) { selectPrevY = null; return; }
+  var vv = window.visualViewport;
+  if (!vv || !vv.height) return;
+
+  /* In document coordinates, so that comparing against the previous event survives the
+     scrolling this function itself does between the two. */
+  var y = rect.bottom + window.scrollY;
+  var now = performance.now();
+  var dragging = selectPrevY !== null && now - selectPrevT < SELECT_GAP_MS;
+  var travel = dragging ? y - selectPrevY : 0;
+  selectPrevY = y;
+  selectPrevT = now;
+  /* A long press is one selectionchange standing on its own, and a reader who has just
+     picked a word out near the bottom of the screen has not asked for the page to move.
+     The couple of px of tolerance below are for a finger pushing at an edge without
+     travelling: the direction it last moved is what says which edge it wants. */
+  if (!dragging) return;
+
+  var band = SELECT_EDGE_DP / vv.scale;
+  var low = vv.offsetTop + vv.height - band;
+  var high = vv.offsetTop + band;
+  if (travel >= -2 && rect.bottom > low) {
+    window.scrollBy(0, Math.min(Math.max(rect.bottom - low, SELECT_EDGE_MIN), band));
+  } else if (travel <= 2 && rect.top < high) {
+    window.scrollBy(0, -Math.min(Math.max(high - rect.top, SELECT_EDGE_MIN), band));
+  }
+}
+
+document.addEventListener("selectionchange", selectionEdgeScroll);
+
+/*
  * Point the text layer at the fonts the picture was drawn with.
  *
  * This is the whole of the fix for a search highlight that stopped short of the word

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Dragging a text selection to the bottom of a PDF now scrolls the document, so a selection
+  can run past the fold without letting go and starting again. Holding a handle against an
+  edge never scrolled anything, and that is not particular to this app: Chrome for Android
+  does the same. What made dragging upward look as though it worked is the browser pulling a
+  part-visible line into view a line at a time, which dragging downward can never trigger,
+  because the deepest thing under the finger is a line that is already fully on screen. The
+  page now follows the end of the selection into the last few millimetres of the screen, in
+  both directions, at a speed set by how far past the edge the finger is.
+
 - Dragging to select text in a PDF follows your finger. It used to freeze partway and then
   jump, taking a heading, the rest of a paragraph or a whole page with it. Two things were
   behind it. WebView floors rendered text at 8 pixels where Chrome does not, and pdf.js
