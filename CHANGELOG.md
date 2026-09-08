@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.16 (2026-09-08)
 
 - Dragging a text selection to the bottom of a PDF now scrolls the document, so a selection
   can run past the fold without letting go and starting again. Holding a handle against an
