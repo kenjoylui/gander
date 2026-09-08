@@ -33,7 +33,9 @@
   be undone, since Android has no way to hand a released permission back, and the route to
   one removed by accident was a fresh trip through the system picker. A recent file still
   goes on the long-press alone: it costs a tap to open again, and the list prunes itself at
-  twenty-five.
+  twenty-five. Cancel is set in a neutral rather than in the app's own colour, which is a
+  burnt red near enough to the error red on Remove that the two together marked nothing and
+  only made Cancel look dangerous too.
 
 - Screen readers name the gesture. A row that can be removed now reads as "double tap and
   hold to Remove" rather than an unnamed long-press, and the headings and Add a folder have
